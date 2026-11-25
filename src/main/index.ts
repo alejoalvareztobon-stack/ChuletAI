@@ -418,7 +418,7 @@ if (!SELFTEST && !app.requestSingleInstanceLock()) {
 
     if (SELFTEST) {
       const { runSelftest } = await import('./selftest')
-      await runSelftest(ctx, { registerShortcuts, runtimeStatus, toggleOverlay })
+      await runSelftest(ctx, { registerShortcuts, runtimeStatus, toggleOverlay, openSettings })
     }
   })
 

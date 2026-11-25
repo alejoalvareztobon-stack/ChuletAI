@@ -21,6 +21,7 @@ interface Helpers {
   registerShortcuts: () => { failed: string[] }
   runtimeStatus: () => RuntimeStatus
   toggleOverlay: () => void
+  openSettings: () => void
 }
 
 interface Check {
@@ -332,6 +333,41 @@ export async function runSelftest(ctx: AppContext, helpers: Helpers): Promise<vo
     }, 15_000)
     check('respuesta en español', Boolean(answeredEs?.text.includes('Me describiría')))
     writeFileSync(join(outDir, '07-flow-es.png'), (await win.webContents.capturePage()).toPNG())
+
+    // Traducción de la última respuesta (es -> en).
+    await js("window.__chuletaiTest.run('translate', { sourceText: 'Hola', targetLanguage: 'en' })")
+    const translated = await waitFor(async () => {
+      const s = await state()
+      const last = s.answers[s.answers.length - 1]
+      return last && last.action === 'translate' && last.status === 'done' ? last : undefined
+    }, 15_000)
+    check('traducir al otro idioma', Boolean(translated?.text.includes("I'd describe myself")))
+
+    // Analizar pantalla con el atajo (captura real con desktopCapturer + respuesta simulada).
+    await pressAccelerator('Control+Shift+Enter')
+    const screenAns = await waitFor(async () => {
+      const s = await state()
+      const last = s.answers[s.answers.length - 1]
+      return last && last.action === 'screen' && last.status !== 'streaming' ? last : undefined
+    }, 20_000)
+    check('Ctrl+Shift+Enter -> analizar pantalla', Boolean(screenAns && screenAns.status === 'done' && screenAns.text.includes('two_sum')), screenAns?.error)
+
+    // Ventana de ajustes.
+    helpers.openSettings()
+    const sw = await waitFor(() => (ctx.settingsWin && ctx.settingsWin.isVisible() ? ctx.settingsWin : undefined), 10_000)
+    await sleep(800)
+    if (sw) {
+      const settingsText = await sw.webContents.executeJavaScript('document.body.innerText')
+      check('ventana de ajustes en español', String(settingsText).includes('Entrevista') && String(settingsText).includes('Hoja de vida'))
+      writeFileSync(join(outDir, '08-settings-es.png'), (await sw.webContents.capturePage()).toPNG())
+      ctx.settings.update({ uiLanguage: 'en' })
+      sw.webContents.send('settings:changed', ctx.settings.get())
+      const enSettings = await waitFor(async () => String(await sw.webContents.executeJavaScript('document.body.innerText')).includes('Resume / CV'), 3000)
+      check('ventana de ajustes cambia a inglés', Boolean(enSettings))
+      sw.close()
+    } else {
+      check('ventana de ajustes abre', false)
+    }
 
     // Audio real: si la captura funciona, el main habrá recibido PCM de ambos canales.
     const s2 = await state()

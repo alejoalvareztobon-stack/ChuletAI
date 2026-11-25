@@ -205,6 +205,7 @@ export function Overlay() {
       stop: stopListening,
       help,
       direct: (text: string) => run('direct', { userMessage: text }),
+      run,
       state: () => ({
         listening,
         sttMode,
