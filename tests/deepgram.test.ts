@@ -8,8 +8,9 @@ describe('deepgramUrl', () => {
     expect(url.host).toBe('api.deepgram.com')
     expect(url.searchParams.get('model')).toBe('nova-3')
     expect(url.searchParams.get('language')).toBe('multi')
-    expect(url.searchParams.get('encoding')).toBe('linear16')
-    expect(url.searchParams.get('sample_rate')).toBe('16000')
+    // WebM/Opus: Deepgram detecta el contenedor, así que no se fija encoding ni sample_rate.
+    expect(url.searchParams.has('encoding')).toBe(false)
+    expect(url.searchParams.has('sample_rate')).toBe(false)
     expect(url.searchParams.get('interim_results')).toBe('true')
   })
 

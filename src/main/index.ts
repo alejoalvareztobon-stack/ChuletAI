@@ -12,7 +12,7 @@ import {
   Tray
 } from 'electron'
 import { join } from 'node:path'
-import { existsSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { createTranslator, resolveUiLanguage } from '../shared/i18n'
 import { buildSystemPrompt, buildUserPrompt, effortForAction, expectedAnswerLanguage } from '../shared/prompt'
 import { allAccelerators } from '../shared/shortcuts'
@@ -35,12 +35,21 @@ import { loadTemplates } from './prompts'
 import { readResumeFile } from './resume'
 import { DeepgramChannel } from './stt/deepgram'
 import { MockStt } from './stt/mock'
+import { log } from './log'
 import { KeyStore, SettingsStore } from './store'
 
 const SELFTEST = process.argv.includes('--selftest')
 if (SELFTEST) {
   // La autoprueba usa su propio perfil para no tocar los ajustes reales.
   app.setPath('userData', join(app.getPath('temp'), `chuletai-selftest-${process.pid}`))
+  if (process.argv.includes('--live')) {
+    // Prueba en vivo: usa las claves reales (keys.json + la clave de cifrado en "Local State").
+    const real = join(app.getPath('appData'), 'chuletai')
+    mkdirSync(app.getPath('userData'), { recursive: true })
+    for (const f of ['Local State', 'keys.json']) {
+      if (existsSync(join(real, f))) copyFileSync(join(real, f), join(app.getPath('userData'), f))
+    }
+  }
 }
 
 export interface AppContext {
@@ -228,6 +237,7 @@ function startStt(): 'live' | 'mock' {
   stopStt()
   const settings = ctx.settings.get()
   const status = runtimeStatus()
+  log('stt', `start mode=${status.sttMode} language=${settings.interviewLanguage}`)
   const onEvent = (e: SttEvent): void => sendToOverlay('stt:event', e)
   const onStatus = (s: SttStatus): void => sendToOverlay('stt:status', s)
   if (status.sttMode === 'mock') {
@@ -263,11 +273,20 @@ const running = new Map<string, AbortController>()
 function providerFor(req: AiRunRequest, settings: Settings): { provider: AiProvider; mode: 'live' | 'mock' } {
   const status = runtimeStatus()
   if (status.aiMode === 'mock') return { provider: new MockProvider(req.action), mode: 'mock' }
-  if (settings.aiProvider === 'gemini') {
-    return { provider: new GeminiProvider(ctx.keys.get('gemini') as string, settings.geminiModel), mode: 'live' }
+  // Se reutiliza el cliente (y su conexión TLS abierta) mientras no cambien la clave ni el modelo.
+  const key = settings.aiProvider === 'gemini' ? (ctx.keys.get('gemini') as string) : (ctx.keys.get('anthropic') as string)
+  const model = settings.aiProvider === 'gemini' ? settings.geminiModel : settings.anthropicModel
+  const cacheKey = `${settings.aiProvider}|${model}|${key}`
+  if (!cachedProvider || cachedProvider.key !== cacheKey) {
+    cachedProvider = {
+      key: cacheKey,
+      provider: settings.aiProvider === 'gemini' ? new GeminiProvider(key, model) : new AnthropicProvider(key, model)
+    }
   }
-  return { provider: new AnthropicProvider(ctx.keys.get('anthropic') as string, settings.anthropicModel), mode: 'live' }
+  return { provider: cachedProvider.provider, mode: 'live' }
 }
+
+let cachedProvider: { key: string; provider: AiProvider } | null = null
 
 async function runAi(req: AiRunRequest): Promise<void> {
   const settings = ctx.settings.get()
@@ -306,6 +325,7 @@ async function runAi(req: AiRunRequest): Promise<void> {
             : err instanceof Error
               ? err.message
               : String(err)
+      log('ai', `${req.action} failed: ${message}`)
       sendToOverlay('ai:done', { id: req.id, mode, error: message })
     }
   } finally {
@@ -365,7 +385,7 @@ function registerIpc(): void {
   ipcMain.handle('ai:run', (_e, req: AiRunRequest) => runAi(req))
   ipcMain.on('ai:cancel', (_e, id: string) => running.get(id)?.abort())
   ipcMain.handle('stt:start', () => startStt())
-  ipcMain.on('stt:audio', (_e, channel: AudioChannel, pcm: ArrayBuffer) => stt?.send(channel, Buffer.from(pcm)))
+  ipcMain.on('stt:audio', (_e, channel: AudioChannel, chunk: ArrayBuffer) => stt?.send(channel, Buffer.from(chunk)))
   ipcMain.on('stt:stop', () => stopStt())
   ipcMain.on('overlay:interactive', (_e, interactive: boolean) => ctx.overlay && setInteractive(ctx.overlay, interactive))
   ipcMain.on('overlay:moveBy', (_e, dx: number, dy: number) => ctx.overlay && moveWindowBy(ctx.overlay, dx, dy))
@@ -373,6 +393,7 @@ function registerIpc(): void {
   ipcMain.on('settings:open', () => openSettings())
   ipcMain.on('app:quit', () => app.quit())
   ipcMain.on('clipboard:write', (_e, text: string) => clipboard.writeText(String(text)))
+  ipcMain.on('log', (_e, scope: string, message: string) => log(`ui:${String(scope).slice(0, 20)}`, String(message).slice(0, 500)))
 }
 
 /** Audio del sistema por loopback: getDisplayMedia en el renderer recibe la pantalla + 'loopback'. */
@@ -401,6 +422,7 @@ if (!SELFTEST && !app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     app.setAppUserModelId('com.chuletai.app')
+    log('app', `start v${app.getVersion()} packaged=${app.isPackaged}`)
     ctx.settings = new SettingsStore()
     ctx.keys = new KeyStore()
     await ctx.keys.init()
@@ -417,8 +439,9 @@ if (!SELFTEST && !app.requestSingleInstanceLock()) {
     registerShortcuts()
 
     if (SELFTEST) {
-      const { runSelftest } = await import('./selftest')
-      await runSelftest(ctx, { registerShortcuts, runtimeStatus, toggleOverlay, openSettings })
+      const { runSelftest, runLiveTest } = await import('./selftest')
+      if (process.argv.includes('--live')) await runLiveTest(ctx, { registerShortcuts, runtimeStatus, toggleOverlay, openSettings })
+      else await runSelftest(ctx, { registerShortcuts, runtimeStatus, toggleOverlay, openSettings })
     }
   })
 

@@ -42,6 +42,7 @@ export interface ChuletApi {
   openSettings(): void
   quit(): void
   copyText(text: string): void
+  log(scope: string, message: string): void
   on<K extends keyof ChuletEvents>(event: K, listener: (payload: ChuletEvents[K]) => void): () => void
 }
 

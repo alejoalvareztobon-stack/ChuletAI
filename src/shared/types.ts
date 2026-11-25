@@ -81,6 +81,8 @@ export interface SttStatus {
   channel: AudioChannel
   state: 'idle' | 'connecting' | 'open' | 'error' | 'closed'
   message?: string
+  /** Cambia con cada conexión nueva: el renderer reinicia la grabación (cabecera WebM). */
+  session?: number
 }
 
 export interface AiRunRequest {

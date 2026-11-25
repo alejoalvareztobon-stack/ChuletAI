@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "selftest": "electron-vite build && electron . --selftest",
     "build": "electron-vite build && electron-builder --win --x64",
-    "build:dir": "electron-vite build && electron-builder --win --x64 --dir"
+    "build:dir": "electron-vite build && electron-builder --win --x64 --dir",
+    "selftest:live": "electron-vite build && electron . --selftest --live"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.14.0",

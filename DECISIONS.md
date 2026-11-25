@@ -101,7 +101,7 @@ Registro de las decisiones tomadas durante la construcción: qué se eligió, qu
 ## 18. OneDrive y node_modules (resuelto: proyecto en C:\dev\ChuletAI)
 
 - **Problema:** el proyecto está en `OneDrive\Documentos`. El primer `npm install` se colgó (conexiones abiertas sin avanzar) y hubo que reiniciarlo. La primera tanda de paquetes tardó unos 10 minutos y la segunda 3, porque OneDrive sincroniza cada archivo de `node_modules` (son miles).
-- **Solución aplicada (24-11-2026):** el proyecto se movió a `C:\dev\ChuletAI`, fuera de OneDrive, a pedido del usuario. No se renombró la carpeta porque estaba en uso: se copió con robocopy (sin `out`, `release` ni `selftest-output`, que se regeneran) y se borró la original. El respaldo será un repositorio en GitHub (pendiente).
+- **Solución aplicada (24-11-2026):** el proyecto se movió a `C:\dev\ChuletAI`, fuera de OneDrive, a pedido del usuario. No se renombró la carpeta porque estaba en uso: se copió con robocopy (sin `out`, `release` ni `selftest-output`, que se regeneran) y se borró la original. El respaldo será un repositorio en GitHub (pendiente). Resultado: `npm ci` tarda 24 s en `C:\dev`, frente a unos 13 min en OneDrive. Ojo: el `/XD out` de robocopy también se saltó las carpetas `out` dentro de `node_modules` (por ejemplo, la de electron-builder), así que hubo que reinstalar con `npm ci`.
 - `node_modules`, `out`, `release` y `selftest-output` están en `.gitignore`.
 
 ## 19. Pruebas
@@ -114,3 +114,20 @@ Registro de las decisiones tomadas durante la construcción: qué se eligió, qu
 ## 20. Empaquetado
 
 - **Decisión:** instalador NSIS sin firma de código, para uso personal. Windows SmartScreen mostrará el aviso "Windows protegió su PC" la primera vez ("Más información" → "Ejecutar de todas formas"). No hay actualización automática.
+
+## 21. Red inestable: audio en Opus, DNS de respaldo y reconexión (24-11-2026)
+
+- **Problema observado en una llamada real:** la transcripción funcionó unos segundos y se detuvo para siempre, aunque se pulsara Detener/Iniciar.
+- **Diagnóstico** (medido en el equipo del usuario):
+  1. La resolución de nombres de Windows (`getaddrinfo`) falla de forma intermitente para `api.deepgram.com`. Sus registros duran solo 10 s, así que cada reconexión vuelve a preguntar, y Windows guarda el fallo en caché. Por eso Iniciar/Detener no ayudaba. Un DNS público (1.1.1.1 / 8.8.8.8) responde siempre.
+  2. Con la videollamada en curso, la subida de internet va saturada. El PCM sin comprimir (256 kbps por canal) se acumulaba y las transcripciones llegaban con 20 a 30 s de retraso. Abrir la conexión llegó a tardar más de 10 s.
+- **Decisiones:**
+  - **Audio en WebM/Opus a 32 kbps con MediaRecorder**, unas 8 veces menos datos. Cada conexión nueva necesita la cabecera WebM, así que el main avisa de cada conexión abierta (`session`) y el renderer reinicia el grabador.
+  - **`RobustResolver`**: DNS del sistema → DNS públicos → última IP buena. Tras un fallo del sistema, consulta primero el público durante 10 min.
+  - **Reconexión sin fin** (0,5 a 8 s), salvo con 401/402/403. Handshake de 20 s.
+  - **Avisos visibles** en la ventana: reconectando, sin audio, subida lenta (más de 10 s de audio pendiente).
+  - **Registro en `%APPDATA%\chuletai\logs\chuletai.log`**, sin claves ni texto de la transcripción.
+  - La captura se reinicia sola si Windows termina una pista (por ejemplo, al cambiar de auriculares), y el contexto de audio se reanuda si se suspende.
+  - **Cliente de IA reutilizado** entre consultas, para no abrir una conexión TLS cada vez: el primer texto bajó de 12 a 26 s a 1,2 s en la misma red.
+- **Alternativa descartada:** bajar a 8 kHz en mulaw (64 kbps). Ahorra menos que Opus y transcribe peor.
+- **Verificación:** `npm run selftest:live` usa las claves reales e inyecta voz sintetizada en inglés como audio del sistema, sin usar los parlantes. Resultado: 7/7. Deepgram transcribió en unos 9 s y Claude respondió en inglés y en español en unos 1,5 s. La transcripción en español no se probó con audio porque Windows solo tiene voces en inglés.

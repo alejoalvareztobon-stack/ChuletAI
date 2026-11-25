@@ -29,6 +29,8 @@ npm install
 npm run dev
 ```
 
+Si `npm run dev` dice que Electron no está instalado (a veces el script de instalación no descarga el binario), ejecuta `node node_modules/electron/install.js` una vez.
+
 ## Configurar las claves
 
 Abre **Ajustes** (el engranaje ⚙ de la ventana flotante o clic derecho en el icono de la bandeja → Ajustes).
@@ -112,6 +114,7 @@ npm run dev        # app con recarga en caliente
 npm test           # pruebas unitarias (Vitest)
 npm run typecheck  # TypeScript
 npm run selftest   # autoprueba en la app real (ver abajo)
+npm run selftest:live  # prueba en vivo con tus claves reales (Deepgram + Claude)
 npm run build      # instalador en release\ChuletAI-Setup-<versión>.exe
 ```
 
@@ -149,6 +152,7 @@ tests/           pruebas unitarias
 
 | Síntoma | Qué hacer |
 |---|---|
+| La transcripción se detiene o va atrasada | Mira el aviso naranja bajo "Transcripción" (reconectando, sin audio o subida lenta). El registro está en `%APPDATA%\chuletai\logs\chuletai.log`. Si la subida de internet va justa, cierra otras subidas (OneDrive, backups) o usa cable. |
 | El indicador 🔊 o 🎙 aparece en rojo | Pasa el mouse por encima para ver el error. Para el micrófono: Configuración de Windows → Privacidad → Micrófono → permitir apps de escritorio. |
 | No transcribe al entrevistador | El loopback captura lo que suena por la salida de audio predeterminada de Windows. Comprueba que la llamada suene por ese dispositivo. |
 | "Anthropic: invalid API key (401)" | Revisa la clave en Ajustes → IA. |

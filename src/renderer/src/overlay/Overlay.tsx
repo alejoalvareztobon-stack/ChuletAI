@@ -13,7 +13,7 @@ import {
   type TranscriptState
 } from '../../../shared/transcript'
 import type { AiAction, AudioChannel, InterviewLanguage, SttStatus } from '../../../shared/types'
-import { startAudioCapture, type AudioCapture } from '../audio'
+import { audioStats, startAudioCapture, startFileCapture, type AudioCapture } from '../audio'
 import { api, useSettings } from '../useApp'
 
 interface Answer {
@@ -47,6 +47,9 @@ export function Overlay() {
   const [input, setInput] = useState('')
   const [copied, setCopied] = useState(false)
   const captureRef = useRef<AudioCapture | null>(null)
+  /** Audio de prueba (autoprueba en vivo); null = micrófono y audio del sistema reales. */
+  const testAudio = useRef<ArrayBuffer | null>(null)
+  const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const transcriptEnd = useRef<HTMLDivElement>(null)
   const interactiveRef = useRef(false)
@@ -76,11 +79,34 @@ export function Overlay() {
     }
   }, [])
 
+  // --- Grabación por canal, sincronizada con las conexiones a Deepgram --------------------
+  const statusRef = useRef<Partial<Record<AudioChannel, SttStatus>>>({})
+  const recSession = useRef<Record<AudioChannel, number>>({ system: -1, mic: -1 })
+  const syncRecorder = useCallback((c: AudioChannel) => {
+    const cap = captureRef.current
+    const st = statusRef.current[c]
+    if (!cap || !st) return
+    if (st.state === 'open') {
+      const session = st.session ?? 0
+      if (recSession.current[c] !== session) {
+        recSession.current[c] = session
+        cap.startRecorder(c)
+      }
+    } else if (st.state === 'connecting' || st.state === 'closed') {
+      recSession.current[c] = -1
+      cap.stopRecorder(c)
+    }
+  }, [])
+
   // --- Eventos del proceso main ---------------------------------------------------------
   useEffect(() => {
     const offs = [
       api().on('stt:event', (e) => setTranscript((s) => applySttEvent(s, e))),
-      api().on('stt:status', (s) => setChannelStatus((prev) => ({ ...prev, [s.channel]: s }))),
+      api().on('stt:status', (s) => {
+        statusRef.current = { ...statusRef.current, [s.channel]: s }
+        setChannelStatus((prev) => ({ ...prev, [s.channel]: s }))
+        syncRecorder(s.channel)
+      }),
       api().on('ai:delta', ({ id, text }) =>
         setAnswers((list) => list.map((a) => (a.id === id ? { ...a, text: a.text + text } : a)))
       ),
@@ -91,7 +117,7 @@ export function Overlay() {
       )
     ]
     return () => offs.forEach((off) => off())
-  }, [])
+  }, [syncRecorder])
 
   useEffect(() => {
     transcriptEnd.current?.scrollIntoView({ block: 'end' })
@@ -136,29 +162,63 @@ export function Overlay() {
     run('direct', { userMessage: text })
   }, [input, run])
 
+  const startCapture = useCallback(async (): Promise<void> => {
+    const sink = (channel: AudioChannel, chunk: ArrayBuffer): void => api().sttAudio(channel, chunk)
+    const onLevel = (channel: AudioChannel, level: number): void =>
+      setLevels((l) => (Math.abs(l[channel] - level) > 0.04 ? { ...l, [channel]: level } : l))
+    if (testAudio.current) {
+      captureRef.current = await startFileCapture(sink, onLevel, testAudio.current)
+      recSession.current = { system: -1, mic: -1 }
+      syncRecorder('system')
+      return
+    }
+    const capture = await startAudioCapture(
+      sink,
+      onLevel,
+      (channel, reason) => {
+        api().log('audio', `${channel}: ${reason}`)
+        // Una pista que termina (p. ej. cambio de auriculares) se recupera reiniciando la captura.
+        if (reason === 'track ended' && !restartTimer.current) {
+          restartTimer.current = setTimeout(() => {
+            restartTimer.current = null
+            if (!captureRef.current) return
+            captureRef.current.stop()
+            captureRef.current = null
+            void startCapture()
+          }, 1000)
+        }
+      }
+    )
+    captureRef.current = capture
+    recSession.current = { system: -1, mic: -1 }
+    syncRecorder('system')
+    syncRecorder('mic')
+    setAudioErrors(capture.errors)
+    for (const [channel, error] of Object.entries(capture.errors)) api().log('audio', `${channel}: capture failed: ${error}`)
+  }, [syncRecorder])
+
   const startListening = useCallback(async () => {
     if (listening) return
     const mode = await api().sttStart()
     setSttMode(mode)
     setListening(true)
     try {
-      const capture = await startAudioCapture(
-        (channel, pcm) => api().sttAudio(channel, pcm),
-        (channel, level) => setLevels((l) => (Math.abs(l[channel] - level) > 0.04 ? { ...l, [channel]: level } : l))
-      )
-      captureRef.current = capture
-      setAudioErrors(capture.errors)
+      await startCapture()
     } catch (err) {
       setAudioErrors({ system: String(err) })
+      api().log('audio', `start failed: ${String(err)}`)
     }
-  }, [listening])
+  }, [listening, startCapture])
 
   const stopListening = useCallback(() => {
+    if (restartTimer.current) clearTimeout(restartTimer.current)
+    restartTimer.current = null
     captureRef.current?.stop()
     captureRef.current = null
     api().sttStop()
     setListening(false)
     setChannelStatus({})
+    statusRef.current = {}
     setLevels({ system: 0, mic: 0 })
   }, [])
 
@@ -202,6 +262,10 @@ export function Overlay() {
   useEffect(() => {
     ;(window as unknown as { __chuletaiTest: unknown }).__chuletaiTest = {
       start: startListening,
+      startWithAudio: async (base64: string) => {
+        testAudio.current = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer
+        await startListening()
+      },
       stop: stopListening,
       help,
       direct: (text: string) => run('direct', { userMessage: text }),
@@ -214,6 +278,7 @@ export function Overlay() {
         audioErrors,
         selection: window.getSelection()?.toString() ?? '',
         mouseMoves,
+        audioStats: JSON.parse(JSON.stringify(audioStats)),
         text: document.body.innerText
       })
     }
@@ -327,6 +392,15 @@ export function Overlay() {
             {settings.showTranscript ? '▾' : '▸'}
           </button>
         </div>
+        {listening &&
+          (['system', 'mic'] as const).map((c) => {
+            const problem = audioErrors[c] ?? channelStatus[c]?.message
+            return problem ? (
+              <p key={c} className="status-line">
+                {c === 'system' ? '🔊' : '🎙'} {t(`channel.${c}`)}: {problem}
+              </p>
+            ) : null
+          })}
         {settings.showTranscript && (
           <div className="transcript-body">
             {segments.length === 0 ? (

@@ -364,6 +364,18 @@ export async function runSelftest(ctx: AppContext, helpers: Helpers): Promise<vo
       check('ventana de ajustes abre', false)
     }
 
+    // El audio debe seguir llegando: compara los bloques recibidos en dos ventanas de 5 s, ~20 s después de empezar.
+    type Stats = { system: { chunks: number; ended: number }; mic: { chunks: number; ended: number } }
+    const statsNow = async (): Promise<Stats> => (await js<{ audioStats: Stats }>('window.__chuletaiTest.state()')).audioStats
+    await sleep(12_000)
+    const a1 = await statsNow()
+    await sleep(5000)
+    const a2 = await statsNow()
+    for (const c of ['system', 'mic'] as const) {
+      const perSec = (a2[c].chunks - a1[c].chunks) / 5
+      check(`el audio de ${c} sigue llegando tras ~20 s`, perSec >= 8, `${perSec.toFixed(1)} bloques/s (esperado ~10), pistas terminadas=${a2[c].ended}`)
+    }
+
     // Audio real: si la captura funciona, el main habrá recibido PCM de ambos canales.
     const s2 = await state()
     check(
@@ -379,5 +391,115 @@ export async function runSelftest(ctx: AppContext, helpers: Helpers): Promise<vo
   const failed = checks.filter((c) => !c.ok)
   writeFileSync(join(outDir, 'report.json'), JSON.stringify({ date: new Date().toISOString(), checks }, null, 2))
   console.log(`\n${checks.length - failed.length}/${checks.length} checks passed. Output: ${outDir}`)
+  app.exit(failed.length ? 1 : 0)
+}
+
+/**
+ * Prueba en vivo (npm run selftest:live): claves reales, Deepgram y Claude de verdad.
+ * Inyecta voz sintetizada en inglés como audio del sistema (sin usar los parlantes).
+ */
+export async function runLiveTest(ctx: AppContext, helpers: Helpers): Promise<void> {
+  const outDir = app.isPackaged ? join(app.getPath('temp'), 'chuletai-selftest-output') : join(app.getAppPath(), 'selftest-output')
+  mkdirSync(outDir, { recursive: true })
+  const checks: Check[] = []
+  const check = (name: string, ok: boolean, detail?: string): void => {
+    checks.push({ name, ok, detail })
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`)
+  }
+  const js = <T>(code: string): Promise<T> => ctx.overlay!.webContents.executeJavaScript(code, true) as Promise<T>
+  type Answer = { action: string; text: string; status: string; error?: string; mode?: string }
+  const state = (): Promise<{
+    segments: Array<{ speaker: string; text: string }>
+    answers: Answer[]
+    audioStats: Record<string, { sentBytes: number; recorders: number }>
+  }> => js('window.__chuletaiTest.state()')
+  const { guessLanguage } = await import('../shared/prompt')
+
+  try {
+    ctx.settings.update({
+      simulation: false,
+      interviewLanguage: 'en',
+      uiLanguage: 'es',
+      privateMode: true,
+      context: {
+        company: 'Acme Analytics',
+        role: 'Data Analyst',
+        jobDescription: 'SQL, Python, Power BI dashboards, stakeholder communication.',
+        resume: 'Data analyst at Rappi (2021-2024): automated weekly reporting with Python and SQL, cutting report time from 2 days to 2 hours. Built Power BI dashboards for 5 teams.',
+        resumeFileName: 'test.txt',
+        notes: ''
+      }
+    })
+    const status = helpers.runtimeStatus()
+    check('claves reales cargadas (IA y transcripción en vivo)', status.aiMode === 'live' && status.sttMode === 'live', JSON.stringify(status.keys))
+    await waitFor(() => js<boolean>('Boolean(window.__chuletaiTest)').catch(() => false), 15_000)
+    ctx.overlay!.webContents.send('settings:changed', ctx.settings.get())
+
+    // Voz sintetizada (Windows SAPI) en inglés.
+    const wav = join(app.getPath('temp'), `chuletai-live-${process.pid}.wav`)
+    const text =
+      'Thanks for joining us today. Can you tell me about your experience with data analysis, and which tools you use every day?'
+    await powershell(
+      `Add-Type -AssemblyName System.Speech; $s=New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.SetOutputToWaveFile('${wav}'); $s.Speak('${text}'); $s.Dispose()`
+    )
+    const b64 = readFileSync(wav).toString('base64')
+
+    const t0 = Date.now()
+    await js(`window.__chuletaiTest.startWithAudio(${JSON.stringify(b64)})`)
+    let firstInterim = 0
+    const gotFinal = await waitFor(async () => {
+      const s = await state()
+      const all = s.segments.filter((x) => x.speaker === 'interviewer').map((x) => x.text).join(' ')
+      if (!firstInterim && all) firstInterim = Date.now() - t0
+      return /experience/i.test(all) && /tools/i.test(all) ? all : undefined
+    }, 120_000, 300)
+    const elapsed = Date.now() - t0
+    check('Deepgram transcribe la voz en inglés', Boolean(gotFinal), gotFinal ? `"${gotFinal.slice(0, 90)}…" en ${(elapsed / 1000).toFixed(1)} s` : 'sin texto en 120 s')
+    const s1 = await state()
+    const kbps = (s1.audioStats.system.sentBytes * 8) / 1000 / (elapsed / 1000)
+    check('audio enviado comprimido (Opus ~32 kbps)', kbps > 10 && kbps < 60, `${kbps.toFixed(1)} kbps, grabadores=${s1.audioStats.system.recorders}`)
+
+    // Respuesta real de Claude en inglés.
+    const ask = async (label: string): Promise<{ a?: Answer; ttft: number; total: number }> => {
+      const before = (await state()).answers.length
+      const start = Date.now()
+      await js('window.__chuletaiTest.help()')
+      let ttft = 0
+      const a = await waitFor(async () => {
+        const s = await state()
+        const last = s.answers[before]
+        if (last?.text && !ttft) ttft = Date.now() - start
+        return last && last.status !== 'streaming' ? last : undefined
+      }, 45_000, 100)
+      console.log(`--- ${label}:\n${a?.text ?? a?.error ?? '(nada)'}\n---`)
+      return { a, ttft, total: Date.now() - start }
+    }
+    const en = await ask('respuesta EN')
+    check('Claude responde (en vivo)', en.a?.status === 'done' && en.a.mode === 'live' && (en.a.text.length ?? 0) > 40, en.a?.error ?? `primer texto en ${(en.ttft / 1000).toFixed(1)} s, total ${(en.total / 1000).toFixed(1)} s`)
+    check('respuesta en inglés', guessLanguage(en.a?.text ?? '') === 'en')
+    check('usa datos del CV', /rappi|2 hours|two hours|power bi/i.test(en.a?.text ?? ''))
+    writeFileSync(join(outDir, 'live-01-en.png'), (await ctx.overlay!.webContents.capturePage()).toPNG())
+
+    // Misma pregunta con la entrevista en español: la respuesta debe salir en español.
+    ctx.settings.update({ interviewLanguage: 'es' })
+    ctx.overlay!.webContents.send('settings:changed', ctx.settings.get())
+    await sleep(500)
+    const es = await ask('respuesta ES')
+    check('Claude responde en español con entrevista en ES', es.a?.status === 'done' && guessLanguage(es.a.text) === 'es', es.a?.error ?? `total ${(es.total / 1000).toFixed(1)} s`)
+    writeFileSync(join(outDir, 'live-02-es.png'), (await ctx.overlay!.webContents.capturePage()).toPNG())
+    await js('window.__chuletaiTest.stop()')
+  } catch (err) {
+    check('prueba en vivo sin excepciones', false, err instanceof Error ? err.stack : String(err))
+  }
+
+  try {
+    const logText = readFileSync(join(app.getPath('userData'), 'logs', 'chuletai.log'), 'utf8')
+    console.log('--- registro:\n' + logText.split('\n').slice(-25).join('\n'))
+  } catch {
+    /* sin registro */
+  }
+  const failed = checks.filter((c) => !c.ok)
+  writeFileSync(join(outDir, 'live-report.json'), JSON.stringify({ date: new Date().toISOString(), checks }, null, 2))
+  console.log(`\n${checks.length - failed.length}/${checks.length} live checks passed.`)
   app.exit(failed.length ? 1 : 0)
 }

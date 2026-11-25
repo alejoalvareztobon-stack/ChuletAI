@@ -18,6 +18,7 @@ const api: ChuletApi = {
   openSettings: () => ipcRenderer.send('settings:open'),
   quit: () => ipcRenderer.send('app:quit'),
   copyText: (text) => ipcRenderer.send('clipboard:write', text),
+  log: (scope, message) => ipcRenderer.send('log', scope, message),
   on(event, listener) {
     if (!EVENT_NAMES.includes(event)) throw new Error(`Unknown event ${String(event)}`)
     const wrapped = (_e: Electron.IpcRendererEvent, payload: ChuletEvents[typeof event]): void => listener(payload)
