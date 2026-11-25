@@ -137,20 +137,19 @@ async function captureWindowRegion(win: BrowserWindow): Promise<NativeImage> {
   })
 }
 
-/** Diferencia media por canal entre dos imágenes del mismo tamaño (0..255). */
-function meanDiff(a: NativeImage, b: NativeImage): number {
-  const ba = a.toBitmap()
-  const bb = b.resize(a.getSize()).toBitmap()
-  let sum = 0
-  const n = Math.min(ba.length, bb.length)
-  for (let i = 0; i < n; i += 4) {
-    sum += Math.abs(ba[i] - bb[i]) + Math.abs(ba[i + 1] - bb[i + 1]) + Math.abs(ba[i + 2] - bb[i + 2])
+/** Cuenta píxeles del verde de acento de ChuletAI (#2fd3a6). toBitmap() es BGRA en Windows. */
+function accentPixels(img: NativeImage): number {
+  const bmp = img.toBitmap()
+  let n = 0
+  for (let i = 0; i < bmp.length; i += 4) {
+    if (Math.abs(bmp[i] - 166) < 24 && Math.abs(bmp[i + 1] - 211) < 24 && Math.abs(bmp[i + 2] - 47) < 24) n++
   }
-  return sum / ((n / 4) * 3)
+  return n
 }
 
 export async function runSelftest(ctx: AppContext, helpers: Helpers): Promise<void> {
-  const outDir = join(app.getAppPath(), 'selftest-output')
+  // En la app empaquetada getAppPath() está dentro del asar: la salida va a la carpeta temporal.
+  const outDir = app.isPackaged ? join(app.getPath('temp'), 'chuletai-selftest-output') : join(app.getAppPath(), 'selftest-output')
   mkdirSync(outDir, { recursive: true })
   const checks: Check[] = []
   const check = (name: string, ok: boolean, detail?: string): void => {
@@ -219,19 +218,13 @@ export async function runSelftest(ctx: AppContext, helpers: Helpers): Promise<vo
     writeFileSync(join(outDir, '03-capture-private-on.png'), hiddenShot.toPNG())
     const aff = (await windowInfo(win)).affinity
     check('modo privado: WDA_EXCLUDEFROMCAPTURE (0x11)', aff === 0x11, `affinity=0x${aff.toString(16)}`)
-    // Control: con la ventana oculta, la captura debe parecerse a la del modo privado.
-    win.hide()
-    await sleep(400)
-    const withoutWindow = await captureWindowRegion(win)
-    writeFileSync(join(outDir, '04-capture-window-hidden.png'), withoutWindow.toPNG())
-    win.showInactive()
-    await sleep(300)
-    const dVisible = meanDiff(visibleShot, withoutWindow)
-    const dPrivate = meanDiff(hiddenShot, withoutWindow)
+    // Los botones verdes de la ventana deben verse en la captura normal y no en la privada.
+    const greenVisible = accentPixels(visibleShot)
+    const greenPrivate = accentPixels(hiddenShot)
     check(
       'modo privado: la ventana no aparece en la captura de desktopCapturer',
-      dPrivate < 1.5 && dVisible > dPrivate * 3 + 2,
-      `diff visible=${dVisible.toFixed(1)} diff privado=${dPrivate.toFixed(1)}`
+      greenVisible > 2000 && greenPrivate < greenVisible / 50,
+      `píxeles de acento: normal=${greenVisible} privado=${greenPrivate}`
     )
 
     // --- Idioma de la interfaz ---------------------------------------------------------------
@@ -310,21 +303,23 @@ export async function runSelftest(ctx: AppContext, helpers: Helpers): Promise<vo
     await pressAccelerator('Control+Shift+Backspace')
     const cleared = await waitFor(async () => (await state()).answers.length === 0, 3000)
     check('Ctrl+Shift+Backspace limpia respuestas', Boolean(cleared))
+    // Se detiene la escucha antes: si no, la transcripción simulada sigue llegando.
+    await js('window.__chuletaiTest.stop()')
+    await sleep(300)
     await pressAccelerator('Control+Backspace')
     const clearedT = await waitFor(async () => (await state()).segments.length === 0, 3000)
     check('Ctrl+Backspace limpia la transcripción', Boolean(clearedT))
 
     // --- Flujo simulado en español -----------------------------------------------------------
-    await js('window.__chuletaiTest.stop()')
     ctx.settings.update({ interviewLanguage: 'es', uiLanguage: 'es' })
     win.webContents.send('settings:changed', ctx.settings.get())
     await sleep(300)
     await js('window.__chuletaiTest.start()')
     const gotEs = await waitFor(async () => {
       const s = await state()
-      return s.segments.find((x) => x.speaker === 'interviewer')
+      return s.segments.find((x) => x.speaker === 'interviewer' && x.text.includes('Hola'))
     }, 15_000)
-    check('transcripción simulada en español', Boolean(gotEs?.text.includes('Hola')))
+    check('transcripción simulada en español', Boolean(gotEs))
     await js('window.__chuletaiTest.help()')
     const answeredEs = await waitFor(async () => {
       const s = await state()
