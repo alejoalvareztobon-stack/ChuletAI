@@ -58,8 +58,11 @@ export class SettingsStore {
 export class KeyStore {
   private readonly file: string
   private encrypted: Partial<Record<KeyName, string>>
-  /** Claves inyectadas solo en memoria (p. ej. variables de entorno en desarrollo). */
+  /** Claves descifradas, solo en memoria del proceso main. */
+  private plain: Partial<Record<KeyName, string>> = {}
+  /** Claves inyectadas solo en memoria (variables de entorno en desarrollo). */
   private readonly memory: Partial<Record<KeyName, string>> = {}
+  private available = false
 
   constructor() {
     this.file = join(dataDir(), 'keys.json')
@@ -67,18 +70,42 @@ export class KeyStore {
     this.encrypted = raw && typeof raw === 'object' ? (raw as Partial<Record<KeyName, string>>) : {}
   }
 
-  encryptionAvailable(): boolean {
-    return safeStorage.isEncryptionAvailable()
+  /** Descifra las claves guardadas. Llamar una vez, después de app.whenReady(). */
+  async init(): Promise<void> {
+    this.available = await safeStorage.isAsyncEncryptionAvailable()
+    if (!this.available) return
+    let changed = false
+    for (const name of KEY_NAMES) {
+      const stored = this.encrypted[name]
+      if (!stored) continue
+      try {
+        const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(stored, 'base64'))
+        this.plain[name] = result
+        if (shouldReEncrypt) {
+          this.encrypted[name] = (await safeStorage.encryptStringAsync(result)).toString('base64')
+          changed = true
+        }
+      } catch {
+        // Clave ilegible (p. ej. copiada de otro usuario de Windows): se ignora.
+      }
+    }
+    if (changed) writeJson(this.file, this.encrypted)
   }
 
-  set(name: KeyName, value: string): void {
+  encryptionAvailable(): boolean {
+    return this.available
+  }
+
+  async set(name: KeyName, value: string): Promise<void> {
     if (!KEY_NAMES.includes(name)) throw new Error(`Unknown key ${name}`)
     const trimmed = value.trim()
     if (!trimmed) {
       delete this.encrypted[name]
+      delete this.plain[name]
     } else {
-      if (!this.encryptionAvailable()) throw new Error('safeStorage encryption is not available')
-      this.encrypted[name] = safeStorage.encryptString(trimmed).toString('base64')
+      if (!this.available) throw new Error('safeStorage encryption is not available')
+      this.encrypted[name] = (await safeStorage.encryptStringAsync(trimmed)).toString('base64')
+      this.plain[name] = trimmed
     }
     writeJson(this.file, this.encrypted)
   }
@@ -88,15 +115,7 @@ export class KeyStore {
   }
 
   get(name: KeyName): string | undefined {
-    const stored = this.encrypted[name]
-    if (stored) {
-      try {
-        return safeStorage.decryptString(Buffer.from(stored, 'base64'))
-      } catch {
-        return undefined
-      }
-    }
-    return this.memory[name]
+    return this.plain[name] ?? this.memory[name]
   }
 
   status(): KeyStatus {

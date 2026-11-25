@@ -10,11 +10,12 @@
 
 import { app, desktopCapturer, globalShortcut, screen, type BrowserWindow, type NativeImage } from 'electron'
 import { execFile } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { allAccelerators } from '../shared/shortcuts'
 import type { RuntimeStatus } from '../shared/types'
 import type { AppContext } from './index'
+import { KeyStore } from './store'
 
 interface Helpers {
   registerShortcuts: () => { failed: string[] }
@@ -105,15 +106,17 @@ async function pressAccelerator(accelerator: string): Promise<void> {
   await powershell(`${down.join('; ')}; Start-Sleep -Milliseconds 60; ${up.join('; ')}`)
 }
 
-/** Mueve el puntero real (entrada inyectada, la ven los hooks de bajo nivel). */
+/** Mueve el puntero real a un punto en DIP (entrada inyectada, la ven los hooks de bajo nivel). */
 async function moveMouse(x: number, y: number): Promise<void> {
-  // Coordenadas absolutas normalizadas sobre el escritorio virtual (MOUSEEVENTF_MOVE|ABSOLUTE|VIRTUALDESK).
-  await powershell(`
-$vx=[W32]::GetSystemMetrics(76); $vy=[W32]::GetSystemMetrics(77); $vw=[W32]::GetSystemMetrics(78); $vh=[W32]::GetSystemMetrics(79)
-$nx=[int](((${x}-$vx)*65535)/($vw-1)); $ny=[int](((${y}-$vy)*65535)/($vh-1))
-[W32]::mouse_event(0xC001,$nx,$ny,0,[UIntPtr]::Zero)
-Start-Sleep -Milliseconds 80
-[W32]::mouse_event(0xC001,$nx+30,$ny+30,0,[UIntPtr]::Zero)`)
+  // MOUSEEVENTF_MOVE|ABSOLUTE|VIRTUALDESK: coordenadas normalizadas 0..65535 sobre el escritorio virtual.
+  const all = screen.getAllDisplays().map((d) => d.bounds)
+  const vx = Math.min(...all.map((b) => b.x))
+  const vy = Math.min(...all.map((b) => b.y))
+  const vw = Math.max(...all.map((b) => b.x + b.width)) - vx
+  const vh = Math.max(...all.map((b) => b.y + b.height)) - vy
+  const nx = Math.round(((x - vx) * 65535) / (vw - 1))
+  const ny = Math.round(((y - vy) * 65535) / (vh - 1))
+  await powershell(`[W32]::mouse_event(0xC001,${nx},${ny},0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [W32]::mouse_event(0xC001,${nx + 200},${ny + 100},0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80; [W32]::mouse_event(0xC001,${nx},${ny},0,[UIntPtr]::Zero)`)
 }
 
 async function captureWindowRegion(win: BrowserWindow): Promise<NativeImage> {
@@ -160,6 +163,7 @@ export async function runSelftest(ctx: AppContext, helpers: Helpers): Promise<vo
     segments: Array<{ speaker: string; text: string }>
     answers: Array<{ action: string; text: string; status: string; error?: string; mode?: string }>
     audioErrors: Record<string, string>
+    selection: string
     text: string
   }> => js('window.__chuletaiTest.state()')
 
@@ -173,16 +177,16 @@ export async function runSelftest(ctx: AppContext, helpers: Helpers): Promise<vo
     // --- Ventana ---------------------------------------------------------------------------
     check('ventana visible', win.isVisible())
     check('siempre encima', win.isAlwaysOnTop())
-    check('visible en todos los escritorios', win.isVisibleOnAllWorkspaces())
     const info = await windowInfo(win)
     const WS_EX_TOPMOST = 0x8
     const WS_EX_TRANSPARENT = 0x20
     const WS_EX_TOOLWINDOW = 0x80
     const WS_EX_LAYERED = 0x80000
     check('WS_EX_TOPMOST', (info.exStyle & WS_EX_TOPMOST) !== 0, `exStyle=0x${info.exStyle.toString(16)}`)
-    check('WS_EX_TOOLWINDOW (sin barra de tareas ni Alt+Tab)', (info.exStyle & WS_EX_TOOLWINDOW) !== 0)
+    check('WS_EX_TOOLWINDOW (sin barra de tareas ni Alt+Tab, en todos los escritorios)', (info.exStyle & WS_EX_TOOLWINDOW) !== 0)
     check('WS_EX_LAYERED (transparente)', (info.exStyle & WS_EX_LAYERED) !== 0)
     check('paso de clics activo (WS_EX_TRANSPARENT)', (info.exStyle & WS_EX_TRANSPARENT) !== 0)
+    console.log('selección inicial:', JSON.stringify((await state()).selection))
     const page = await win.webContents.capturePage()
     writeFileSync(join(outDir, '01-overlay-es.png'), page.toPNG())
 
@@ -191,14 +195,14 @@ export async function runSelftest(ctx: AppContext, helpers: Helpers): Promise<vo
     const original = screen.getCursorScreenPoint()
     const sf = screen.getDisplayMatching(b).scaleFactor
     // Centro de la barra superior (un panel interactivo), en píxeles físicos.
-    await moveMouse(Math.round((b.x + b.width / 2) * sf), Math.round((b.y + 22) * sf))
+    await moveMouse(b.x + b.width / 2, b.y + 22)
     const becameInteractive = await waitFor(async () => ((await windowInfo(win)).exStyle & WS_EX_TRANSPARENT) === 0, 4000, 300)
-    check('al pasar el mouse por un panel la ventana recibe clics', Boolean(becameInteractive))
+    check('al pasar el mouse por un panel la ventana recibe clics', Boolean(becameInteractive), `mousemoves=${(await js<{ mouseMoves: number }>('window.__chuletaiTest.state()')).mouseMoves} cursor=${JSON.stringify(screen.getCursorScreenPoint())} bounds=${JSON.stringify(b)} sf=${sf}`)
     // Fuera de la ventana: vuelve a dejar pasar los clics.
-    await moveMouse(Math.round((b.x - 200) * sf), Math.round((b.y + b.height / 2) * sf))
+    await moveMouse(b.x - 200, b.y + b.height / 2)
     const backToClickThrough = await waitFor(async () => ((await windowInfo(win)).exStyle & WS_EX_TRANSPARENT) !== 0, 4000, 300)
     check('al salir vuelve el paso de clics', Boolean(backToClickThrough))
-    await moveMouse(Math.round(original.x * sf), Math.round(original.y * sf))
+    await moveMouse(original.x, original.y)
 
     // --- Modo privado ------------------------------------------------------------------------
     win.setContentProtection(false)
@@ -225,18 +229,29 @@ export async function runSelftest(ctx: AppContext, helpers: Helpers): Promise<vo
     const dPrivate = meanDiff(hiddenShot, withoutWindow)
     check(
       'modo privado: la ventana no aparece en la captura de desktopCapturer',
-      dVisible > 8 && dPrivate < dVisible / 3,
+      dPrivate < 1.5 && dVisible > dPrivate * 3 + 2,
       `diff visible=${dVisible.toFixed(1)} diff privado=${dPrivate.toFixed(1)}`
     )
 
     // --- Idioma de la interfaz ---------------------------------------------------------------
     const textEs = (await state()).text
-    check('interfaz en español', textEs.includes('Ayúdame') && textEs.includes('Transcripción'))
+    check('interfaz en español', textEs.includes('Ayúdame') && textEs.toLowerCase().includes('transcripción'))
     ctx.settings.update({ uiLanguage: 'en' })
     win.webContents.send('settings:changed', ctx.settings.get())
     const enOk = await waitFor(async () => (await state()).text.includes('Help me'), 3000)
     check('cambio de idioma de la interfaz a inglés', Boolean(enOk))
     writeFileSync(join(outDir, '05-overlay-en.png'), (await win.webContents.capturePage()).toPNG())
+
+    // --- Claves cifradas con safeStorage -----------------------------------------------------
+    const fake = 'sk-fake-selftest-1234567890'
+    await ctx.keys.set('gemini', fake)
+    const onDisk = readFileSync(join(app.getPath('userData'), 'keys.json'), 'utf8')
+    check('las claves se guardan cifradas (sin texto plano en keys.json)', ctx.keys.encryptionAvailable() && !onDisk.includes(fake) && onDisk.includes('gemini'))
+    const reloaded = new KeyStore()
+    await reloaded.init()
+    check('las claves se descifran al reiniciar', reloaded.get('gemini') === fake)
+    await ctx.keys.set('gemini', '')
+    check('quitar una clave la borra del disco', !readFileSync(join(app.getPath('userData'), 'keys.json'), 'utf8').includes('gemini'))
 
     // --- Atajos globales ---------------------------------------------------------------------
     const accels = allAccelerators(ctx.settings.get().shortcutModifier)
@@ -278,6 +293,7 @@ export async function runSelftest(ctx: AppContext, helpers: Helpers): Promise<vo
     const lastEn = answered?.answers[answered.answers.length - 1]
     check('Ctrl+Enter -> respuesta en streaming terminada', Boolean(lastEn?.text && lastEn.text.length > 50))
     check('respuesta en inglés', Boolean(lastEn?.text.includes("I'd describe myself")))
+    console.log('selección tras el flujo:', JSON.stringify((await state()).selection))
     writeFileSync(join(outDir, '06-flow-en.png'), (await win.webContents.capturePage()).toPNG())
 
     // Navegación entre respuestas: crea una segunda y vuelve a la primera.

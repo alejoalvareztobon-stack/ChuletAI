@@ -342,8 +342,8 @@ function registerIpc(): void {
     return next
   })
   ipcMain.handle('status:get', () => runtimeStatus())
-  ipcMain.handle('keys:set', (_e, name: KeyName, value: string) => {
-    ctx.keys.set(name, value)
+  ipcMain.handle('keys:set', async (_e, name: KeyName, value: string) => {
+    await ctx.keys.set(name, value)
     const status = runtimeStatus()
     broadcast('status:changed', status)
     return status
@@ -403,6 +403,7 @@ if (!SELFTEST && !app.requestSingleInstanceLock()) {
     app.setAppUserModelId('com.chuletai.app')
     ctx.settings = new SettingsStore()
     ctx.keys = new KeyStore()
+    await ctx.keys.init()
     // En desarrollo se aceptan claves por variable de entorno (solo en memoria, nunca se guardan).
     if (!app.isPackaged && !SELFTEST) {
       ctx.keys.setInMemory('anthropic', process.env.ANTHROPIC_API_KEY)

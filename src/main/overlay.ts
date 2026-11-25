@@ -32,6 +32,9 @@ export function createOverlayWindow(privateMode: boolean): BrowserWindow {
     fullscreenable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
+    // En Windows 'toolbar' = WS_EX_TOOLWINDOW: fuera de la barra de tareas y de Alt+Tab,
+    // y visible en todos los escritorios virtuales (setVisibleOnAllWorkspaces solo existe en macOS/Linux).
+    type: 'toolbar',
     hasShadow: false,
     show: false,
     title: 'ChuletAI',

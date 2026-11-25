@@ -27,6 +27,7 @@ interface Answer {
 }
 
 let counter = 0
+let mouseMoves = 0
 const newId = (): string => `a${Date.now().toString(36)}${(counter++).toString(36)}`
 
 export function Overlay() {
@@ -58,6 +59,7 @@ export function Overlay() {
       api().setInteractive(value)
     }
     const onMove = (e: MouseEvent): void => {
+      mouseMoves++
       const el = e.target as Element | null
       setInteractive(Boolean(el?.closest?.('[data-interactive]')))
     }
@@ -209,6 +211,8 @@ export function Overlay() {
         segments: transcriptRef.current.segments,
         answers: answersRef.current,
         audioErrors,
+        selection: window.getSelection()?.toString() ?? '',
+        mouseMoves,
         text: document.body.innerText
       })
     }
