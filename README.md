@@ -137,7 +137,7 @@ src/shared/      lógica sin Electron: prompts, transcripción, i18n, atajos, ti
 tests/           pruebas unitarias
 ```
 
-**OneDrive:** el proyecto está en `OneDrive\Documentos`, y OneDrive hace muy lento `npm install` porque sincroniza `node_modules` (miles de archivos). Es mejor mover la carpeta fuera de OneDrive (por ejemplo a `C:\dev\ChuletAI`). Ver [DECISIONS.md](DECISIONS.md#18-onedrive-y-node_modules).
+**Ubicación:** el proyecto vive en `C:\dev\ChuletAI`, fuera de OneDrive, porque OneDrive vuelve muy lento `npm install` al sincronizar `node_modules`. Ver [DECISIONS.md](DECISIONS.md#18-onedrive-y-node_modules-resuelto-proyecto-en-cdevchuletai).
 
 ## Privacidad
 

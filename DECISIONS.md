@@ -98,12 +98,10 @@ Registro de las decisiones tomadas durante la construcción: qué se eligió, qu
 
 - **Decisión:** no se extrajo `app.asar`. Bastó con el resumen de la sesión anterior (configuración de la ventana, loopback y Speechmatics) y la documentación de Electron. No se copió código, nombre, textos ni imágenes. El icono es propio, generado con un script.
 
-## 18. OneDrive y node_modules
+## 18. OneDrive y node_modules (resuelto: proyecto en C:\dev\ChuletAI)
 
 - **Problema:** el proyecto está en `OneDrive\Documentos`. El primer `npm install` se colgó (conexiones abiertas sin avanzar) y hubo que reiniciarlo. La primera tanda de paquetes tardó unos 10 minutos y la segunda 3, porque OneDrive sincroniza cada archivo de `node_modules` (son miles).
-- **Propuesta (no aplicada, la carpeta no se movió):**
-  1. Lo mejor: mover el proyecto fuera de OneDrive, por ejemplo a `C:\dev\ChuletAI`, y respaldarlo con git (por ejemplo, en un repositorio privado). El código ya está en git, así que mover la carpeta no pierde nada.
-  2. Si se queda en OneDrive, funciona, pero cada `npm install` será lento y OneDrive subirá cientos de MB de dependencias. OneDrive personal no permite excluir una subcarpeta concreta como `node_modules`.
+- **Solución aplicada (24-11-2026):** el proyecto se movió a `C:\dev\ChuletAI`, fuera de OneDrive, a pedido del usuario. No se renombró la carpeta porque estaba en uso: se copió con robocopy (sin `out`, `release` ni `selftest-output`, que se regeneran) y se borró la original. El respaldo será un repositorio en GitHub (pendiente).
 - `node_modules`, `out`, `release` y `selftest-output` están en `.gitignore`.
 
 ## 19. Pruebas
