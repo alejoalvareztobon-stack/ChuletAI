@@ -1,0 +1,28 @@
+appId: com.chuletai.app
+productName: ChuletAI
+copyright: Uso personal
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  - '!**/*.map'
+extraResources:
+  - from: resources/icon.png
+    to: icon.png
+asarUnpack:
+  - resources/**
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-Setup-${version}.${ext}
+  shortcutName: ChuletAI
+  createDesktopShortcut: true
+npmRebuild: false

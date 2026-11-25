@@ -1,0 +1,1 @@
+Always answer in Spanish. Responde siempre en español neutro y natural, como lo diría un profesional latinoamericano, aunque la hoja de vida, las notas o partes de la transcripción estén en inglés. Deja en inglés solo los términos técnicos que en el trabajo se dicen así (por ejemplo, "deploy" o "pull request").

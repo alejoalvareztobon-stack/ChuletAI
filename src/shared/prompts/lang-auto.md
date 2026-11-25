@@ -1,0 +1,1 @@
+Answer in the language the interviewer used in their latest question. If they mix English and Spanish, use the language of most of that question. If it is unclear, use the language of most of the recent transcript. Keep technical terms as they are normally said at work.
