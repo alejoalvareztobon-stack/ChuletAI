@@ -90,6 +90,10 @@ export class DeepgramChannel {
   private bytesSinceStats = 0
   private lastError = ''
   private silent = false
+  /** Diagnóstico: mensajes de Deepgram desde el último resumen (sin guardar el texto). */
+  private dg = { results: 0, withText: 0, other: 0 }
+  private seenTypes = new Set<string>()
+  private firstText = false
 
   constructor(
     private readonly channel: AudioChannel,
@@ -104,7 +108,13 @@ export class DeepgramChannel {
       const kb = Math.round(this.bytesSinceStats / 1024)
       this.bytesSinceStats = 0
       const backlog = this.ws?.bufferedAmount ?? 0
-      log('stt', `${channel}: ${kb} KB of audio in 15 s, backlog=${Math.round(backlog / 1024)} KB, socket=${this.ws?.readyState ?? 'none'}`)
+      const dg = this.dg
+      this.dg = { results: 0, withText: 0, other: 0 }
+      log(
+        'stt',
+        `${channel}: ${kb} KB of audio in 15 s, backlog=${Math.round(backlog / 1024)} KB, socket=${this.ws?.readyState ?? 'none'}, ` +
+          `deepgram results=${dg.results} withText=${dg.withText} other=${dg.other}`
+      )
       if (this.stopped) return
       if (kb === 0) {
         this.silent = true
@@ -143,6 +153,7 @@ export class DeepgramChannel {
     })
     ws.on('message', (data) => {
       const raw = data.toString()
+      this.noteMessage(raw)
       const event = parseDeepgramMessage(this.channel, raw)
       if (event) this.onEvent(event)
       else if (raw.includes('"Error"') || raw.includes('"error"')) log('stt', `${this.channel}: server message ${raw.slice(0, 300)}`)
@@ -175,6 +186,33 @@ export class DeepgramChannel {
       }
       if (this.ws === ws) this.scheduleReconnect()
     })
+  }
+
+  /** Cuenta los mensajes de Deepgram y registra la primera vez que aparece cada tipo (sin texto). */
+  private noteMessage(raw: string): void {
+    let type = '?'
+    let text = ''
+    try {
+      const msg = JSON.parse(raw)
+      type = String(msg.type ?? '?')
+      text = msg.channel?.alternatives?.[0]?.transcript ?? ''
+    } catch {
+      type = 'non-json'
+    }
+    if (type === 'Results') {
+      this.dg.results++
+      if (text) this.dg.withText++
+    } else {
+      this.dg.other++
+    }
+    if (!this.seenTypes.has(type)) {
+      this.seenTypes.add(type)
+      log('stt', `${this.channel}: first deepgram message type=${type}`)
+    }
+    if (text && !this.firstText) {
+      this.firstText = true
+      log('stt', `${this.channel}: first transcript received (${text.length} chars)`)
+    }
   }
 
   private reconnectTimer: NodeJS.Timeout | null = null

@@ -82,6 +82,8 @@ export function Overlay() {
   // --- Grabación por canal, sincronizada con las conexiones a Deepgram --------------------
   const statusRef = useRef<Partial<Record<AudioChannel, SttStatus>>>({})
   const recSession = useRef<Record<AudioChannel, number>>({ system: -1, mic: -1 })
+  const levelTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const firstEventLogged = useRef<Record<AudioChannel, boolean>>({ system: false, mic: false })
   const syncRecorder = useCallback((c: AudioChannel) => {
     const cap = captureRef.current
     const st = statusRef.current[c]
@@ -91,6 +93,7 @@ export function Overlay() {
       if (recSession.current[c] !== session) {
         recSession.current[c] = session
         cap.startRecorder(c)
+        api().log('rec', `${c}: recorder started for session ${session}`)
       }
     } else if (st.state === 'connecting' || st.state === 'closed') {
       recSession.current[c] = -1
@@ -101,7 +104,13 @@ export function Overlay() {
   // --- Eventos del proceso main ---------------------------------------------------------
   useEffect(() => {
     const offs = [
-      api().on('stt:event', (e) => setTranscript((s) => applySttEvent(s, e))),
+      api().on('stt:event', (e) => {
+        if (e.text && !firstEventLogged.current[e.channel]) {
+          firstEventLogged.current[e.channel] = true
+          api().log('rec', `${e.channel}: first transcript event reached the window (final=${e.isFinal})`)
+        }
+        setTranscript((s) => applySttEvent(s, e))
+      }),
       api().on('stt:status', (s) => {
         statusRef.current = { ...statusRef.current, [s.channel]: s }
         setChannelStatus((prev) => ({ ...prev, [s.channel]: s }))
@@ -190,6 +199,14 @@ export function Overlay() {
       }
     )
     captureRef.current = capture
+    // Cada 15 s, el nivel máximo captado por canal: distingue "llega silencio" de "Deepgram no entiende".
+    if (levelTimer.current) clearInterval(levelTimer.current)
+    levelTimer.current = setInterval(() => {
+      if (!captureRef.current) return
+      const fmt = (c: AudioChannel): string => `${c}=${audioStats[c].peak.toFixed(3)} (${audioStats[c].chunks} blocks)`
+      api().log('audio', `peak level in 15 s: ${fmt('system')} ${fmt('mic')}`)
+      audioStats.system.peak = audioStats.mic.peak = 0
+    }, 15_000)
     recSession.current = { system: -1, mic: -1 }
     syncRecorder('system')
     syncRecorder('mic')
@@ -213,6 +230,8 @@ export function Overlay() {
   const stopListening = useCallback(() => {
     if (restartTimer.current) clearTimeout(restartTimer.current)
     restartTimer.current = null
+    if (levelTimer.current) clearInterval(levelTimer.current)
+    levelTimer.current = null
     captureRef.current?.stop()
     captureRef.current = null
     api().sttStop()

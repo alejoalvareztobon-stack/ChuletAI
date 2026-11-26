@@ -14,9 +14,12 @@ export const OPUS_BITRATE = 32_000
 export const TIMESLICE_MS = 250
 
 /** Diagnóstico y autoprueba: bloques medidos, trozos enviados y pistas terminadas por canal. */
-export const audioStats: Record<AudioChannel, { chunks: number; sentBytes: number; recorders: number; ended: number }> = {
-  system: { chunks: 0, sentBytes: 0, recorders: 0, ended: 0 },
-  mic: { chunks: 0, sentBytes: 0, recorders: 0, ended: 0 }
+export const audioStats: Record<
+  AudioChannel,
+  { chunks: number; sentBytes: number; recorders: number; ended: number; peak: number }
+> = {
+  system: { chunks: 0, sentBytes: 0, recorders: 0, ended: 0, peak: 0 },
+  mic: { chunks: 0, sentBytes: 0, recorders: 0, ended: 0, peak: 0 }
 }
 
 export type AudioProblem = (channel: AudioChannel, reason: string) => void
@@ -87,6 +90,14 @@ async function captureChannel(
     }
   }
   for (const track of stream.getAudioTracks()) {
+    const st = track.getSettings()
+    onProblem(
+      channel,
+      `track "${track.label}" enabled=${track.enabled} muted=${track.muted} state=${track.readyState} ` +
+        `rate=${st.sampleRate ?? '?'} ch=${st.channelCount ?? '?'}`
+    )
+    track.addEventListener('mute', () => onProblem(channel, 'track muted by the system'))
+    track.addEventListener('unmute', () => onProblem(channel, 'track unmuted'))
     track.addEventListener('ended', () => {
       audioStats[channel].ended++
       onProblem(channel, 'track ended')
@@ -97,7 +108,9 @@ async function captureChannel(
   const node = new AudioWorkletNode(ctx, 'pcm-capture')
   node.port.onmessage = (e: MessageEvent<Float32Array>) => {
     audioStats[channel].chunks++
-    onLevel(channel, rmsLevel(e.data))
+    const level = rmsLevel(e.data)
+    if (level > audioStats[channel].peak) audioStats[channel].peak = level
+    onLevel(channel, level)
   }
   source.connect(node)
   // No conectamos a ctx.destination: así no se reproduce el audio capturado.
@@ -112,6 +125,47 @@ async function captureChannel(
     },
     sink
   )
+}
+
+const MIC_CONSTRAINTS = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }
+
+/**
+ * Abre el micrófono. Si el predeterminado de Windows llega silenciado (track.muted: el
+ * dispositivo está muteado en Windows o no es el que usa Meet), prueba el de comunicaciones
+ * y luego los demás, y se queda con el primero que no esté silenciado.
+ */
+export async function openMicrophone(onProblem: AudioProblem): Promise<MediaStream> {
+  const open = (deviceId?: string): Promise<MediaStream> =>
+    navigator.mediaDevices.getUserMedia({
+      audio: deviceId ? { ...MIC_CONSTRAINTS, deviceId: { exact: deviceId } } : MIC_CONSTRAINTS,
+      video: false
+    })
+  const isMuted = (s: MediaStream): boolean => s.getAudioTracks().every((t) => t.muted)
+  const first = await open()
+  const inputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput')
+  onProblem('mic', `inputs: ${inputs.map((d) => `[${d.deviceId.slice(0, 8)}] ${d.label}`).join(' | ')}`)
+  if (!isMuted(first)) return first
+
+  onProblem('mic', `default microphone "${first.getAudioTracks()[0]?.label}" is muted, trying others`)
+  const order = [
+    ...inputs.filter((d) => d.deviceId === 'communications'),
+    ...inputs.filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications')
+  ]
+  for (const d of order) {
+    try {
+      const s = await open(d.deviceId)
+      if (!isMuted(s)) {
+        first.getTracks().forEach((t) => t.stop())
+        onProblem('mic', `using "${d.label}" instead`)
+        return s
+      }
+      s.getTracks().forEach((t) => t.stop())
+    } catch (err) {
+      onProblem('mic', `could not open "${d.label}": ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+  onProblem('mic', 'every microphone is muted in Windows')
+  return first
 }
 
 export interface AudioCapture {
@@ -145,10 +199,8 @@ export async function startAudioCapture(
   }
 
   try {
-    const mic = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
-      video: false
-    })
+    const mic = await openMicrophone(onProblem)
+    if (mic.getAudioTracks().every((t) => t.muted)) errors.mic = 'Microphone is muted in Windows (Settings > Sound > Input)'
     captures.set('mic', await captureChannel(mic, 'mic', sink, onLevel, onProblem))
   } catch (err) {
     errors.mic = err instanceof Error ? err.message : String(err)
