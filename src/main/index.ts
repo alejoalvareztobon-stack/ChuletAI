@@ -83,6 +83,7 @@ function runtimeStatus(): RuntimeStatus {
     aiMode: !s.simulation && keys[aiKey] ? 'live' : 'mock',
     sttMode: !s.simulation && keys.deepgram ? 'live' : 'mock',
     keys,
+    keyHints: ctx.keys.hints(),
     encryptionAvailable: ctx.keys.encryptionAvailable(),
     systemLocale: app.getLocale()
   }
@@ -363,7 +364,13 @@ function registerIpc(): void {
   })
   ipcMain.handle('status:get', () => runtimeStatus())
   ipcMain.handle('keys:set', async (_e, name: KeyName, value: string) => {
-    await ctx.keys.set(name, value)
+    try {
+      await ctx.keys.set(name, value)
+      log('keys', `${name}: ${value.trim() ? 'saved' : 'removed'}`)
+    } catch (err) {
+      log('keys', `${name}: save FAILED ${err instanceof Error ? err.message : String(err)}`)
+      throw err
+    }
     const status = runtimeStatus()
     broadcast('status:changed', status)
     return status
@@ -426,6 +433,7 @@ if (!SELFTEST && !app.requestSingleInstanceLock()) {
     ctx.settings = new SettingsStore()
     ctx.keys = new KeyStore()
     await ctx.keys.init()
+    log('keys', `loaded: ${JSON.stringify(ctx.keys.status())} encryption=${ctx.keys.encryptionAvailable()}`)
     // En desarrollo se aceptan claves por variable de entorno (solo en memoria, nunca se guardan).
     if (!app.isPackaged && !SELFTEST) {
       ctx.keys.setInMemory('anthropic', process.env.ANTHROPIC_API_KEY)

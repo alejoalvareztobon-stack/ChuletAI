@@ -54,6 +54,8 @@ export interface RuntimeStatus {
   aiMode: 'live' | 'mock'
   sttMode: 'live' | 'mock'
   keys: KeyStatus
+  /** Últimos 4 caracteres de cada clave guardada, para que el usuario reconozca cuál es. */
+  keyHints: Partial<Record<KeyName, string>>
   encryptionAvailable: boolean
   systemLocale: string
 }

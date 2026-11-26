@@ -100,6 +100,9 @@ const en = {
 
   'keys.placeholder': 'Paste the key here',
   'keys.saved': 'Key saved (encrypted)',
+  'keys.savedHint': 'Key saved (encrypted) · ends in …{hint}',
+  'keys.saving': 'Saving…',
+  'keys.help': 'Paste the key and press Enter (it is also saved when you leave the field).',
   'keys.missing': 'No key',
   'keys.remove': 'Remove',
   'keys.encryptionUnavailable': 'Encryption is not available on this system; keys cannot be saved.',
@@ -231,6 +234,9 @@ const es: Dictionary = {
 
   'keys.placeholder': 'Pega la clave aquí',
   'keys.saved': 'Clave guardada (cifrada)',
+  'keys.savedHint': 'Clave guardada (cifrada) · termina en …{hint}',
+  'keys.saving': 'Guardando…',
+  'keys.help': 'Pega la clave y pulsa Enter (también se guarda al salir del campo).',
   'keys.missing': 'Sin clave',
   'keys.remove': 'Quitar',
   'keys.encryptionUnavailable': 'El cifrado no está disponible en este sistema; no se pueden guardar claves.',

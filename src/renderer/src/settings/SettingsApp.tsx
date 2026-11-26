@@ -11,40 +11,56 @@ function KeyField({ name, label }: { name: KeyName; label: string }) {
   const { status, t } = useSettings()
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
   if (!status) return null
   const has = status.keys[name]
+  const hint = status.keyHints?.[name]
   const save = async (v: string): Promise<void> => {
+    if (saving) return
     try {
       setError('')
+      setSaving(true)
       await api().setKey(name, v)
       setValue('')
     } catch (err) {
       setError(String(err))
+    } finally {
+      setSaving(false)
     }
   }
   return (
     <div className="field">
       <label>{label}</label>
-      <div className="row">
+      {/* Se guarda con Enter, con el botón o al salir del campo (como el resto de Ajustes). */}
+      <form
+        className="row"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (value.trim()) void save(value)
+        }}
+      >
         <input
           type="password"
           autoComplete="off"
           spellCheck={false}
           value={value}
-          placeholder={has ? '••••••••••••' : t('keys.placeholder')}
+          placeholder={has ? `••••••••••••${hint ?? ''}` : t('keys.placeholder')}
           onChange={(e) => setValue(e.target.value)}
+          onBlur={() => value.trim() && void save(value)}
           disabled={!status.encryptionAvailable}
         />
-        <button className="btn primary" disabled={!value.trim()} onClick={() => void save(value)}>
+        <button className="btn primary" type="submit" disabled={!value.trim() || saving}>
           {t('settings.save')}
         </button>
         {has && (
-          <button className="btn" onClick={() => void save('')}>
+          <button className="btn" type="button" onClick={() => void save('')}>
             {t('keys.remove')}
           </button>
         )}
-      </div>
-      <small className={has ? 'ok' : 'muted'}>{has ? `✓ ${t('keys.saved')}` : t('keys.missing')}</small>
+      </form>
+      <small className={has ? 'ok' : 'muted'}>
+        {saving ? t('keys.saving') : has ? `✓ ${hint ? t('keys.savedHint', { hint }) : t('keys.saved')}` : `${t('keys.missing')} — ${t('keys.help')}`}
+      </small>
       {!status.encryptionAvailable && <small className="error">{t('keys.encryptionUnavailable')}</small>}
       {error && <small className="error">{error}</small>}
     </div>

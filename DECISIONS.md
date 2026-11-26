@@ -131,3 +131,10 @@ Registro de las decisiones tomadas durante la construcción: qué se eligió, qu
   - **Cliente de IA reutilizado** entre consultas, para no abrir una conexión TLS cada vez: el primer texto bajó de 12 a 26 s a 1,2 s en la misma red.
 - **Alternativa descartada:** bajar a 8 kHz en mulaw (64 kbps). Ahorra menos que Opus y transcribe peor.
 - **Verificación:** `npm run selftest:live` usa las claves reales e inyecta voz sintetizada en inglés como audio del sistema, sin usar los parlantes. Resultado: 7/7. Deepgram transcribió en unos 9 s y Claude respondió en inglés y en español en unos 1,5 s. La transcripción en español no se probó con audio porque Windows solo tiene voces en inglés.
+
+## 22. Guardado de claves en Ajustes (25-11-2026)
+
+- **Problema reportado:** "mis API keys no se guardan".
+- **Diagnóstico:** las claves guardadas estaban bien en `keys.json` y se descifraban sin problema. Pero en Ajustes los campos de la entrevista se guardan solos al escribir, y los de las claves solo se guardaban con el botón "Guardar": pegar la clave y pulsar Enter, o cerrar la ventana, no guardaba nada. Además, después de guardar el campo quedaba vacío, sin forma de ver qué clave había. La instancia que estaba abierta tampoco había escrito nada en el registro desde que arrancó (no se pudo determinar por qué; al reiniciarla todo volvió a funcionar).
+- **Decisión:** las claves se guardan con Enter, con el botón o al salir del campo, igual que el resto de Ajustes. Se muestra "Clave guardada (cifrada) · termina en …1234", con solo los últimos 4 caracteres, para que el usuario reconozca la clave sin exponerla. El registro anota qué claves se cargaron al arrancar y cada intento de guardar o quitar, sin el valor.
+- **Verificación:** la autoprueba escribe claves en la ventana real de Ajustes (Enter y salir del campo), comprueba la pista y que sigan ahí al reiniciar.

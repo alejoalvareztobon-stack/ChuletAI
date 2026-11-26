@@ -118,6 +118,16 @@ export class KeyStore {
     return this.plain[name] ?? this.memory[name]
   }
 
+  /** Últimos 4 caracteres de cada clave (nunca la clave completa). */
+  hints(): Partial<Record<KeyName, string>> {
+    const out: Partial<Record<KeyName, string>> = {}
+    for (const name of KEY_NAMES) {
+      const v = this.get(name)
+      if (v && v.length >= 12) out[name] = v.slice(-4)
+    }
+    return out
+  }
+
   status(): KeyStatus {
     return {
       anthropic: Boolean(this.get('anthropic')),
