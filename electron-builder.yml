@@ -1,6 +1,6 @@
 appId: com.chuletai.app
 productName: ChuletAI
-copyright: Uso personal
+copyright: Copyright © 2026 alejoalvareztobon-stack (MIT License)
 directories:
   output: release
   buildResources: build

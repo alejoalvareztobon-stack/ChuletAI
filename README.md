@@ -1,160 +1,222 @@
+<div align="center">
+
+<img src="build/icon.png" width="96" alt="ChuletAI logo" />
+
 # ChuletAI
 
-Copiloto personal para entrevistas y llamadas en Windows. Escucha la llamada, la transcribe en vivo separando al entrevistador (audio del sistema) de ti (micrófono) y, con un atajo, te sugiere qué decir en una ventana flotante que no aparece al compartir pantalla.
+**A live AI copilot for interviews and calls on Windows.**
+It transcribes the call in real time and, with one shortcut, suggests what to say, in a small floating window.
 
-- Ventana transparente, siempre encima y que deja pasar los clics (se vuelve interactiva al pasar el mouse por un panel).
-- Modo privado: oculta la ventana al compartir pantalla en Zoom, Meet o Teams.
-- Transcripción en tiempo real con Deepgram Nova-3, en inglés, en español o mezclando los dos.
-- Respuestas en streaming con Claude Haiku 5.5 (o Gemini Flash), cortas, en primera persona y en el idioma de la entrevista.
-- Tres acciones: **Ayúdame** (responde a lo último que dijo el entrevistador), **Analizar pantalla** (captura y analiza lo que tienes en pantalla, por ejemplo un ejercicio de código) y **Mensaje directo** (una pregunta tuya).
-- Contexto de la entrevista: hoja de vida (PDF o texto), descripción del cargo, empresa y notas.
-- Interfaz en español e inglés.
+[Download for Windows](https://github.com/alejoalvareztobon-stack/ChuletAI/releases/latest) · [Features](#features) · [Install](#install) · [Usage](#usage) · [Build from source](#build-from-source)
 
-> Las decisiones de diseño y sus motivos están en [DECISIONS.md](DECISIONS.md).
+![Platform: Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6)
+![Electron](https://img.shields.io/badge/Electron-45-47848F)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-## Instalación
+</div>
 
-### Opción A: instalador
+<p align="center">
+  <img src="docs/images/answer.png" width="420" alt="ChuletAI suggesting an answer to the interviewer's question" />
+</p>
 
-1. Genera el instalador (ver "Desarrollo") o usa uno ya generado: `release\ChuletAI-Setup-0.1.0.exe`.
-2. Ejecútalo. Como no está firmado, Windows SmartScreen mostrará "Windows protegió su PC": pulsa **Más información → Ejecutar de todas formas**.
-3. ChuletAI arranca en la bandeja del sistema (el rombo verde junto al reloj) y muestra la ventana flotante arriba a la derecha.
+ChuletAI listens to both sides of a call. It picks up the other person from your system audio and you from your microphone, and shows a live transcript. Press **Ctrl+Enter** and it writes a short first-person answer to the last question, grounded in your resume and the job description. You get one line you can say as-is, plus a few supporting points.
 
-### Opción B: desde el código
+> "Chuleta" is Spanish slang for a cheat sheet.
 
-Requisitos: Windows 10 (2004 o posterior) u 11, Node.js 20 o superior y git.
+## Features
+
+- **Live transcription, speaker-separated.** Deepgram Nova-3 streaming, with *Interviewer* (system audio) and *Me* (microphone) on separate channels. Works in English, Spanish, or both mixed in the same sentence.
+- **Instant answers.** Streaming answers from Claude Haiku 5.5, or Google Gemini Flash. They are short, in the first person, and in the language of the interview.
+- **Three actions:**
+  - **Help me** (`Ctrl+Enter`) answers the interviewer's last question.
+  - **Analyze screen** (`Ctrl+Shift+Enter`) takes a screenshot and explains it, for example a coding exercise.
+  - **Ask** sends a question you type.
+- **Interview context.** Load your resume (PDF or text), the job description, the company, the role and your own notes. All of it goes into the prompt.
+- **Floating overlay.** Transparent and always on top. Clicks pass through to the app below, and it only becomes clickable when you hover a panel.
+- **Private mode.** The window is excluded from screen sharing, screenshots and recordings (see [Private mode](#private-mode)).
+- **Reliable on bad connections.** Audio goes out as Opus (about 8× smaller than raw PCM), with automatic reconnection, a DNS fallback and on-screen warnings when the upload falls behind.
+- **Smart microphone choice.** It uses the system default, or a microphone you pick. If that one is muted in Windows or unplugged, it falls back to one that works.
+- **Translate & copy.** Switch any answer between English and Spanish, or copy it in one click.
+- **Bilingual UI** in English and Spanish.
+- **Your keys, no server.** ChuletAI talks directly to Deepgram and Anthropic or Google with your own API keys. The keys are encrypted with Windows DPAPI.
+
+<table>
+  <tr>
+    <td><img src="docs/images/transcript.png" alt="Live transcript" /></td>
+    <td><img src="docs/images/settings-interview.png" alt="Interview context settings" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Live transcript, interviewer vs. me</sub></td>
+    <td align="center"><sub>Interview context: resume, role, job description, notes</sub></td>
+  </tr>
+</table>
+
+## Requirements
+
+| | |
+|---|---|
+| **OS** | Windows 10 version 2004 (May 2020) or later, or Windows 11, 64-bit |
+| **Deepgram API key** | For live transcription. [console.deepgram.com](https://console.deepgram.com) → API Keys. New accounts come with free credit. |
+| **Anthropic API key** | For answers with Claude. [console.anthropic.com](https://console.anthropic.com) → API Keys |
+| **Google Gemini API key** *(optional)* | Alternative AI provider. [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+
+Without keys the app runs in **simulation mode**: a sample transcript and sample answers, so you can try the window and shortcuts first.
+
+## Install
+
+1. Go to the [latest release](https://github.com/alejoalvareztobon-stack/ChuletAI/releases/latest) and download **`ChuletAI-Setup-<version>.exe`**.
+2. Run it. The installer isn't code-signed, so Windows SmartScreen may say *"Windows protected your PC"*. Click **More info → Run anyway**.
+3. Pick the install folder. The installer creates a desktop shortcut.
+4. ChuletAI starts in the system tray (green ◆ near the clock) and shows the floating window in the top-right corner.
+
+To **uninstall**: *Settings → Apps → ChuletAI → Uninstall*. To also remove your settings and keys, delete `%APPDATA%\ChuletAI`.
+
+## Set up your API keys
+
+Open **Settings**: the ⚙ gear on the floating window, or right-click the tray icon → *Settings*.
+
+| Service | Settings tab |
+|---|---|
+| Anthropic (Claude) | **AI** |
+| Google Gemini (optional) | **AI** → Provider: Gemini |
+| Deepgram | **Transcription** |
+
+Paste each key and press **Enter**. Keys also save when you leave the field. Settings shows "*Key saved (encrypted) · ends in …1234*" so you can tell which key is stored without exposing it.
+
+Keys are encrypted with Electron's `safeStorage` (Windows DPAPI) in `%APPDATA%\ChuletAI\keys.json`. They are never stored in plain text and never reach the UI.
+
+<p align="center"><img src="docs/images/settings-transcription.png" width="620" alt="Transcription settings: service, microphone and Deepgram key" /></p>
+
+## Usage
+
+1. **Before the call**, open *Settings → Interview*. Choose the interview language, enter the company and role, paste the job description, load your resume and add notes. Good notes include achievements with numbers, stories for behavioral questions, your salary range and questions you want to ask.
+2. **When the call starts**, press **Start** on the floating window. The 🔊 (system) and 🎙 (microphone) meters show audio levels.
+3. **When the interviewer asks something**, press **Ctrl+Enter**. Within seconds you get a bold line you can say as-is, followed by 2–4 supporting points.
+4. **For an on-screen exercise**, press **Ctrl+Shift+Enter** (*Analyze screen*).
+5. **To ask your own question**, press **Ctrl+Shift+Space** or click the text box, type, and press Enter.
+6. Use **Translate to EN/ES** and **Copy** on any answer.
+
+**Interview language** (EN / ES / Auto in the top bar):
+- **EN** or **ES**: transcription and answers in that language.
+- **Auto**: Deepgram understands English and Spanish mixed together, and each answer comes out in the language of the interviewer's last question.
+
+**Move** the window by dragging "◆ ChuletAI" or with Ctrl+arrows. **Hide** it with Ctrl+H or the "–" button. **Quit** with the ✕ button, or right-click the tray icon → *Quit*.
+
+### Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Enter` | Help me: answer the last question |
+| `Ctrl+Shift+Enter` | Analyze screen |
+| `Ctrl+H` | Hide / show the window |
+| `Ctrl+↑ ↓ ← →` | Move the window |
+| `Ctrl+Shift+← / →` | Previous / next answer |
+| `Ctrl+Backspace` | Clear the transcript |
+| `Ctrl+Shift+Backspace` | Clear the answers |
+| `Ctrl+Shift+Space` | Make the window interactive and type a question |
+
+Shortcuts are **global**: while ChuletAI runs, those key combinations stop reaching other apps (for example, Ctrl+Backspace no longer deletes words in Word). If that gets in the way, switch to **Ctrl+Alt** in *Settings → General → Shortcut modifier*, so every shortcut becomes `Ctrl+Alt+…`.
+
+### Private mode
+
+Private mode is **on by default** (green "● Private" badge). It calls `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, so Windows leaves the window out of screen sharing (Zoom, Meet, Teams, browser tab or full-screen sharing), screenshots and recordings. Click the badge to turn it off.
+
+What it does **not** do:
+- It doesn't hide the window from someone looking at your monitor, or from a camera pointed at it.
+- It doesn't hide the process: `ChuletAI.exe` is visible in Task Manager, and proctoring tools that inspect running processes can see it.
+- On Windows versions older than 2004, a black box appears instead of the window.
+
+## Costs
+
+ChuletAI is free. You only pay the providers, with your own keys. These are approximate list prices as of November 2026, so check each provider's pricing page.
+
+| Item | How it's billed | Cost |
+|---|---|---|
+| Transcription (Deepgram Nova-3, streaming) | About $0.006–0.009 per minute **per channel**; ChuletAI uses 2 channels | **≈ $0.70–1.10 per hour** of call |
+| Answers (Claude Haiku 5.5) | $0.10 / M input tokens, $0.50 / M output tokens. Each answer is about 5–10k tokens in and 200 out | **≈ $0.001 per answer** |
+| Analyze screen | Same as an answer, plus the image (about 1,500 tokens) | ≈ $0.002 per screenshot |
+
+A one-hour interview with 30 requests costs **about $1**, almost all of it transcription.
+
+## Customizing the prompts
+
+The prompts are Markdown files in [`src/shared/prompts/`](src/shared/prompts/):
+
+| File | Used for |
+|---|---|
+| `system.md` | Style rules and interview context |
+| `help.md`, `help-no-question.md` | Help me |
+| `screen.md` | Analyze screen |
+| `direct.md` | Your own question |
+| `translate.md` | Translate |
+| `lang-en.md`, `lang-es.md`, `lang-auto.md` | Language rule |
+| `length-short.md`, `length-medium.md` | Answer length |
+
+To change them **without rebuilding**, create `%APPDATA%\ChuletAI\prompts\` and put a file with the same name in it, for example `system.md`. ChuletAI uses your file instead of the built-in one. `{{...}}` placeholders are filled in automatically.
+
+## Privacy
+
+- Audio goes to **Deepgram**. Text, and screenshots if you use *Analyze screen*, go to **Anthropic** or **Google**. Both use your own keys. ChuletAI has no server of its own and no telemetry.
+- Settings, your resume and notes are stored unencrypted in `%APPDATA%\ChuletAI\settings.json`. API keys are encrypted in `keys.json`.
+- The diagnostic log (`%APPDATA%\ChuletAI\logs\chuletai.log`) records connection events, audio levels and message counts. It never records transcript text or keys.
+
+## Troubleshooting
+
+| Symptom | What to do |
+|---|---|
+| "Listening…" but no text appears | Check the 🎙 / 🔊 meters and the warning under *Transcript*. If your default microphone is muted in Windows, ChuletAI switches to another one automatically; you can also choose one in *Settings → Transcription → Microphone*. Details are in `%APPDATA%\ChuletAI\logs\chuletai.log`. |
+| The interviewer isn't transcribed | System audio is captured from Windows' default output device. Make sure the call plays through that device. |
+| A meter turns red | Hover it to see the error. For the microphone: *Windows Settings → Privacy & security → Microphone → Let desktop apps access your microphone*. |
+| Transcript stops or lags | Look at the orange warning (reconnecting, no audio, or slow upload). Pause other uploads (OneDrive, backups) or use a cable. |
+| `Anthropic: invalid API key (401)` / `Deepgram: invalid API key (401)` | Paste the key again in Settings. |
+| `Deepgram: no credit left on the account (402)` | Add credit to your Deepgram account. |
+| Shortcuts don't respond | Another app may already use the same combinations. Switch to Ctrl+Alt in *Settings → General*. |
+| SmartScreen blocks the installer | Click *More info → Run anyway*. The installer isn't code-signed. |
+
+## Build from source
+
+**Prerequisites:** Windows 10/11 x64, [Node.js](https://nodejs.org) 20.19+ or 22.12+, and [Git](https://git-scm.com).
 
 ```powershell
-npm install
+git clone https://github.com/alejoalvareztobon-stack/ChuletAI.git
+cd ChuletAI
+npm ci
 npm run dev
 ```
 
-Si `npm run dev` dice que Electron no está instalado (a veces el script de instalación no descarga el binario), ejecuta `node node_modules/electron/install.js` una vez.
+If `npm run dev` says Electron isn't installed (its install script sometimes skips the binary download), run `node node_modules/electron/install.js` once.
 
-## Configurar las claves
-
-Abre **Ajustes** (el engranaje ⚙ de la ventana flotante o clic derecho en el icono de la bandeja → Ajustes).
-
-| Servicio | Para qué | Dónde conseguir la clave | Pestaña |
-|---|---|---|---|
-| Anthropic | Respuestas con Claude Haiku 5.5 | https://console.anthropic.com → API Keys | IA |
-| Deepgram | Transcripción en vivo | https://console.deepgram.com → API Keys (la cuenta nueva trae crédito gratis) | Transcripción |
-| Google Gemini (opcional) | Proveedor alternativo | https://aistudio.google.com/apikey | IA → Proveedor: Gemini |
-
-Pega cada clave y pulsa **Guardar**. Las claves se cifran con el almacén seguro de Windows (DPAPI, vía `safeStorage` de Electron) en `%APPDATA%\chuletai\keys.json`: no se guardan en texto plano, no van al código ni a git y la ventana nunca las ve.
-
-Sin claves, la app funciona en **modo simulado** (etiqueta naranja "Simulado"): la transcripción es una entrevista de ejemplo y las respuestas son textos de ejemplo. Sirve para probar los atajos y la ventana. También se puede forzar desde Ajustes → General.
-
-## Uso
-
-1. **Antes de la llamada**, en Ajustes → Entrevista: elige el idioma de la entrevista, escribe la empresa y el cargo, pega la descripción del cargo, carga tu hoja de vida (PDF o texto) y añade notas (logros con cifras, historias para preguntas de comportamiento, rango salarial, preguntas que quieres hacer). Todo eso va en el prompt.
-2. **Al empezar la llamada**, pulsa **Iniciar** en la ventana flotante. Windows puede pedir permiso para usar el micrófono. Los dos indicadores (🔊 sistema y 🎙 micrófono) muestran el nivel de audio.
-3. Cuando el entrevistador pregunte algo, pulsa **Ctrl+Enter** (Ayúdame). La respuesta aparece en segundos: primero una línea en negrita que puedes decir tal cual y luego 2 a 4 puntos de apoyo.
-4. Si te ponen un ejercicio en pantalla, pulsa **Ctrl+Shift+Enter** (Analizar pantalla).
-5. Para preguntar algo tú, pulsa **Ctrl+Shift+Espacio** (o haz clic en la caja de texto), escribe y pulsa Enter.
-6. Con **Traducir al EN/ES** pasas la respuesta al otro idioma, y con **Copiar** la copias.
-
-**Idioma de la entrevista** (botones EN / ES / Auto en la barra superior):
-- **EN** o **ES**: la transcripción y las respuestas van en ese idioma.
-- **Auto**: Deepgram entiende inglés y español mezclados, y la respuesta sale en el idioma de la última pregunta del entrevistador.
-
-**Mover la ventana:** arrastra el logo "◆ ChuletAI" o usa Ctrl+flechas. **Ocultarla:** Ctrl+H o el botón "–". **Salir:** clic derecho en el icono de la bandeja → Salir.
-
-### Modo privado
-
-Está **activado por defecto** (indicador "● Privado" en verde). Usa `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, así que la ventana no sale al compartir pantalla en Zoom, Meet o Teams, ni en capturas o grabaciones. Lo puedes apagar con un clic en el indicador. Comprobado con capturas de `desktopCapturer` y de GDI: con el modo privado la ventana no aparece. Requiere Windows 10 2004 o posterior. En versiones más viejas sale un recuadro negro en su lugar.
-
-## Atajos
-
-| Atajo | Acción |
+| Command | What it does |
 |---|---|
-| Ctrl+Enter | Ayúdame: responder a la última pregunta |
-| Ctrl+Shift+Enter | Analizar pantalla |
-| Ctrl+H | Ocultar o mostrar la ventana |
-| Ctrl+↑ ↓ ← → | Mover la ventana |
-| Ctrl+Shift+← / → | Respuesta anterior o siguiente |
-| Ctrl+Backspace | Limpiar la transcripción |
-| Ctrl+Shift+Backspace | Limpiar las respuestas |
-| Ctrl+Shift+Espacio | Volver la ventana interactiva y escribir una pregunta |
+| `npm run dev` | Run the app with hot reload |
+| `npm test` | Unit tests (Vitest) |
+| `npm run typecheck` | TypeScript checks |
+| `npm run selftest` | End-to-end self-test of the real app in simulation mode (see below) |
+| `npm run selftest:live` | Live test with your real keys (Deepgram + Claude) |
+| `npm run screenshots` | Regenerate the README screenshots in `docs/images/` |
+| `npm run build` | Build the installer in `release\ChuletAI-Setup-<version>.exe` |
 
-Son **globales**: mientras ChuletAI esté abierta, esas combinaciones dejan de llegar a las demás apps (por ejemplo, Ctrl+Backspace ya no borra palabras en Word). Si te estorba, en Ajustes → General → "Tecla de los atajos" elige **Ctrl+Alt**, y todos pasan a Ctrl+Alt+… (por ejemplo, Ctrl+Alt+Enter).
+**Self-test.** `npm run selftest` launches the built app with a temporary profile in simulation mode. It checks the window styles (always on top, hidden from Alt+Tab, click-through), private mode via real screen captures, key encryption, UI language switching, the global shortcuts with real key presses, and the full flow: transcript → Help me → answer, translate, and analyze screen. It moves the mouse and presses keys for about 40 seconds, so don't touch anything while it runs. Close any installed ChuletAI first, or the shortcut checks will fail.
 
-## Costos aproximados
+**Tech stack:** Electron 45, React 19, TypeScript, electron-vite, electron-builder (NSIS), Deepgram streaming over WebSocket (`ws`), Anthropic SDK, Google GenAI SDK, `unpdf` for PDF resumes.
 
-Precios de lista a noviembre de 2026. Confírmalos en las páginas de cada proveedor.
-
-| Concepto | Cálculo | Costo |
-|---|---|---|
-| Transcripción (Deepgram Nova-3, streaming) | Unos USD 0,006 a 0,009 por minuto **y por canal**. ChuletAI usa 2 canales (sistema y micrófono) | **USD 0,70 a 1,10 por hora** de llamada |
-| Respuestas (Claude Haiku 5.5) | USD 0,10 por millón de tokens de entrada y 0,50 de salida. Cada "Ayúdame" usa unos 5.000 a 10.000 tokens de entrada (CV, cargo y transcripción) y unos 200 de salida | **unos USD 0,001 por respuesta**, es decir, unos 5 centavos por 50 respuestas |
-| Analizar pantalla | Igual, más la imagen (unos 1.500 tokens) | unos USD 0,002 por captura |
-
-Una entrevista de una hora con 30 consultas cuesta **alrededor de USD 1**, casi todo por la transcripción. El prompt del sistema se cachea, así que las consultas repetidas salen todavía más baratas. Deepgram regala crédito al crear la cuenta.
-
-## Personalizar los prompts
-
-Los prompts están en [`src/shared/prompts/`](src/shared/prompts/):
-
-| Archivo | Uso |
-|---|---|
-| `system.md` | Reglas de estilo y contexto de la entrevista |
-| `help.md`, `help-no-question.md` | Ayúdame |
-| `screen.md` | Analizar pantalla |
-| `direct.md` | Mensaje directo |
-| `translate.md` | Traducir |
-| `lang-en.md`, `lang-es.md`, `lang-auto.md` | Regla de idioma |
-| `length-short.md`, `length-medium.md` | Largo de la respuesta |
-
-Para ajustarlos **sin recompilar**, crea la carpeta `%APPDATA%\chuletai\prompts\` y pon un archivo con el mismo nombre (por ejemplo `system.md`). ChuletAI lo usa en lugar del que trae por defecto. Las variables `{{...}}` se reemplazan solas.
-
-## Desarrollo
-
-```powershell
-npm run dev        # app con recarga en caliente
-npm test           # pruebas unitarias (Vitest)
-npm run typecheck  # TypeScript
-npm run selftest   # autoprueba en la app real (ver abajo)
-npm run selftest:live  # prueba en vivo con tus claves reales (Deepgram + Claude)
-npm run build      # instalador en release\ChuletAI-Setup-<versión>.exe
-```
-
-**Autoprueba (`npm run selftest`).** Abre la app compilada con un perfil temporal y en modo simulado, y comprueba de verdad:
-
-- Los estilos de la ventana (siempre encima, fuera de Alt+Tab, paso de clics).
-- Que se vuelve interactiva al pasar el mouse por encima.
-- El modo privado, con capturas de pantalla.
-- El cifrado de claves.
-- El cambio de idioma.
-- Los atajos con pulsaciones reales.
-- El flujo completo en inglés y español: transcripción → Ayúdame → respuesta, traducir y analizar pantalla.
-
-Mueve el mouse y pulsa teclas durante unos 40 segundos, así que no toques nada mientras corre. Deja capturas y un `report.json` en `selftest-output\`.
-
-**Estructura:**
+**Project layout:**
 
 ```
-src/main/        proceso principal: ventana, atajos, audio loopback, IA, Deepgram, ajustes y claves
-src/preload/     puente seguro (window.chuletai)
-src/renderer/    interfaz React (ventana flotante y ajustes) y captura de audio
-src/shared/      lógica sin Electron: prompts, transcripción, i18n, atajos, tipos
-tests/           pruebas unitarias
+src/main/        main process: windows, shortcuts, loopback audio, AI, Deepgram, settings and keys
+src/preload/     secure bridge (window.chuletai)
+src/renderer/    React UI (overlay and settings) and audio capture
+src/shared/      Electron-free logic: prompts, transcript, i18n, shortcuts, types
+tests/           unit tests
+docs/images/     README screenshots
 ```
 
-**Ubicación:** el proyecto vive en `C:\dev\ChuletAI`, fuera de OneDrive, porque OneDrive vuelve muy lento `npm install` al sincronizar `node_modules`. Ver [DECISIONS.md](DECISIONS.md#18-onedrive-y-node_modules-resuelto-proyecto-en-cdevchuletai).
+Design decisions and their reasons are recorded in [DECISIONS.md](DECISIONS.md).
 
-## Privacidad
+## Responsible use
 
-- El audio va a Deepgram y el texto (y las capturas, si usas "Analizar pantalla") va a Anthropic o Google, con tus propias claves. ChuletAI no tiene servidor propio.
-- Los ajustes, el CV y las notas se guardan en `%APPDATA%\chuletai\settings.json`, sin cifrar. Las claves van cifradas en `keys.json`.
-- Para borrarlo todo: desinstala la app y borra la carpeta `%APPDATA%\chuletai`.
+Many companies and exam platforms don't allow AI assistance during interviews or assessments. Check the rules before you use ChuletAI in one, and respect them. Getting caught usually ends the process. It also works well for practicing with mock interviews.
 
-## Problemas comunes
+## License
 
-| Síntoma | Qué hacer |
-|---|---|
-| La transcripción se detiene o va atrasada | Mira el aviso naranja bajo "Transcripción" (reconectando, sin audio o subida lenta). El registro está en `%APPDATA%\chuletai\logs\chuletai.log`. Si la subida de internet va justa, cierra otras subidas (OneDrive, backups) o usa cable. |
-| El indicador 🔊 o 🎙 aparece en rojo | Pasa el mouse por encima para ver el error. Para el micrófono: Configuración de Windows → Privacidad → Micrófono → permitir apps de escritorio. |
-| No transcribe al entrevistador | El loopback captura lo que suena por la salida de audio predeterminada de Windows. Comprueba que la llamada suene por ese dispositivo. |
-| "Anthropic: invalid API key (401)" | Revisa la clave en Ajustes → IA. |
-| Los atajos no responden | Otra app puede tener registradas las mismas combinaciones. Cambia a Ctrl+Alt en Ajustes → General. |
-| La ventana tapa algo | Ctrl+H para ocultarla, o arrástrala. Donde no hay paneles, los clics pasan a la app de abajo. |
+[MIT](LICENSE)

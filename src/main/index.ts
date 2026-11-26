@@ -448,7 +448,8 @@ if (!SELFTEST && !app.requestSingleInstanceLock()) {
 
     if (SELFTEST) {
       const { runSelftest, runLiveTest } = await import('./selftest')
-      if (process.argv.includes('--live')) await runLiveTest(ctx, { registerShortcuts, runtimeStatus, toggleOverlay, openSettings })
+      if (process.argv.includes('--screenshots')) await (await import('./screenshots')).runScreenshots(ctx, { openSettings })
+      else if (process.argv.includes('--live')) await runLiveTest(ctx, { registerShortcuts, runtimeStatus, toggleOverlay, openSettings })
       else await runSelftest(ctx, { registerShortcuts, runtimeStatus, toggleOverlay, openSettings })
     }
   })

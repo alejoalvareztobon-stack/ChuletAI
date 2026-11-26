@@ -7,7 +7,7 @@ release/
 .env.*
 coverage/
 .vite/
-# Datos locales y claves nunca van a git
+# Local data and keys never go to git
 userdata/
 *.key
 selftest-output/

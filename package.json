@@ -2,10 +2,14 @@
   "name": "chuletai",
   "productName": "ChuletAI",
   "version": "0.1.0",
-  "description": "Copiloto personal para entrevistas y llamadas: transcribe en vivo y sugiere respuestas con IA.",
+  "description": "Live AI copilot for interviews and calls on Windows: real-time transcription and suggested answers.",
   "main": "./out/main/index.js",
-  "author": "ChuletAI",
-  "license": "UNLICENSED",
+  "author": "alejoalvareztobon-stack",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alejoalvareztobon-stack/ChuletAI.git"
+  },
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",
@@ -16,7 +20,8 @@
     "selftest": "electron-vite build && electron . --selftest",
     "build": "electron-vite build && electron-builder --win --x64",
     "build:dir": "electron-vite build && electron-builder --win --x64 --dir",
-    "selftest:live": "electron-vite build && electron . --selftest --live"
+    "selftest:live": "electron-vite build && electron . --selftest --live",
+    "screenshots": "electron-vite build && electron . --selftest --screenshots"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.14.0",
