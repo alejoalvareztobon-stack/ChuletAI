@@ -59,6 +59,8 @@ const en = {
   'toolbar.settings': 'Settings',
   'toolbar.hide': 'Hide ({key})',
   'toolbar.quit': 'Quit',
+  'toolbar.quitHint': 'Quit ChuletAI (closes it completely)',
+  'general.quit': 'Quit ChuletAI',
 
   'settings.title': 'ChuletAI settings',
   'settings.tab.context': 'Interview',
@@ -193,6 +195,8 @@ const es: Dictionary = {
   'toolbar.settings': 'Ajustes',
   'toolbar.hide': 'Ocultar ({key})',
   'toolbar.quit': 'Salir',
+  'toolbar.quitHint': 'Salir de ChuletAI (la cierra del todo)',
+  'general.quit': 'Salir de ChuletAI',
 
   'settings.title': 'Ajustes de ChuletAI',
   'settings.tab.context': 'Entrevista',

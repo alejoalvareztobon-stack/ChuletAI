@@ -362,6 +362,9 @@ export function Overlay() {
         <button className="icon" title={t('toolbar.hide', { key: shortcutLabel('toggleVisibility', mod) })} onClick={() => api().hide()}>
           –
         </button>
+        <button className="icon quit" title={t('toolbar.quitHint')} onClick={() => api().quit()}>
+          ✕
+        </button>
       </header>
 
       {/* Transcripción */}

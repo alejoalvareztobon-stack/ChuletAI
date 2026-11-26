@@ -300,6 +300,9 @@ export function SettingsApp() {
               </select>
               <small className="muted">{t('general.modifierNote')}</small>
             </div>
+            <button className="btn danger" onClick={() => api().quit()}>
+              {t('general.quit')}
+            </button>
           </>
         )}
 
