@@ -32,6 +32,8 @@ const newId = (): string => `a${Date.now().toString(36)}${(counter++).toString(3
 
 export function Overlay() {
   const { settings, status, t, update } = useSettings()
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
   const [transcript, setTranscript] = useState<TranscriptState>(createTranscript)
   const transcriptRef = useRef(transcript)
   transcriptRef.current = transcript
@@ -196,7 +198,8 @@ export function Overlay() {
             void startCapture()
           }, 1000)
         }
-      }
+      },
+      { deviceId: settingsRef.current?.micDeviceId ?? '', label: settingsRef.current?.micLabel ?? '' }
     )
     captureRef.current = capture
     // Cada 15 s, el nivel máximo captado por canal: distingue "llega silencio" de "Deepgram no entiende".
@@ -240,6 +243,24 @@ export function Overlay() {
     statusRef.current = {}
     setLevels({ system: 0, mic: 0 })
   }, [])
+
+  // Si cambia el micrófono elegido en Ajustes mientras escucha, se reinicia la sesión con el nuevo.
+  const micId = settings?.micDeviceId
+  const prevMicId = useRef(micId)
+  useEffect(() => {
+    if (prevMicId.current === micId) return
+    prevMicId.current = micId
+    if (!listening) return
+    api().log('audio', 'microphone changed in Settings, restarting')
+    restartPending.current = true
+    stopListening()
+  }, [micId, listening, stopListening])
+  const restartPending = useRef(false)
+  useEffect(() => {
+    if (listening || !restartPending.current) return
+    restartPending.current = false
+    void startListening()
+  }, [listening, startListening])
 
   const clearAnswers = useCallback(() => {
     answersRef.current.filter((a) => a.status === 'streaming').forEach((a) => api().cancelAi(a.id))

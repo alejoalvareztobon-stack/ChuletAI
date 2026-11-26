@@ -81,6 +81,13 @@ describe('settings normalization', () => {
     expect(s.context.resume).toBe('')
   })
 
+  it('uses the system default microphone unless one was chosen', () => {
+    expect(DEFAULT_SETTINGS.micDeviceId).toBe('')
+    expect(normalizeSettings({ micDeviceId: 42 }).micDeviceId).toBe('')
+    const s = normalizeSettings({ micDeviceId: 'abc', micLabel: 'Headset' })
+    expect([s.micDeviceId, s.micLabel]).toEqual(['abc', 'Headset'])
+  })
+
   it('defaults to Claude Haiku 5.5 with low effort and private mode on', () => {
     expect(DEFAULT_SETTINGS.anthropicModel).toBe('claude-haiku-5-5')
     expect(DEFAULT_SETTINGS.effort).toBe('low')

@@ -7,6 +7,68 @@ import { api, useSettings } from '../useApp'
 type Tab = 'context' | 'ai' | 'transcription' | 'general' | 'shortcuts'
 const TABS: Tab[] = ['context', 'ai', 'transcription', 'general', 'shortcuts']
 
+/** Selector de micrófono. Las entradas 'default' y 'communications' son alias de Windows: se omiten. */
+function MicField({
+  settings,
+  update,
+  t
+}: {
+  settings: Settings
+  update: (patch: Partial<Settings>) => Promise<unknown>
+  t: (key: MessageKey) => string
+}) {
+  const [mics, setMics] = useState<MediaDeviceInfo[]>([])
+  useEffect(() => {
+    let alive = true
+    const load = async (): Promise<void> => {
+      let list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput')
+      // Sin un permiso previo, Chromium no da los nombres: se pide el micrófono un instante.
+      if (list.length && list.every((d) => !d.label)) {
+        try {
+          const s = await navigator.mediaDevices.getUserMedia({ audio: true })
+          s.getTracks().forEach((tr) => tr.stop())
+          list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput')
+        } catch {
+          /* sin permiso: se muestran sin nombre */
+        }
+      }
+      if (alive) setMics(list.filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications'))
+    }
+    void load()
+    navigator.mediaDevices.addEventListener('devicechange', load)
+    return () => {
+      alive = false
+      navigator.mediaDevices.removeEventListener('devicechange', load)
+    }
+  }, [])
+  const known = !settings.micDeviceId || mics.some((d) => d.deviceId === settings.micDeviceId)
+  return (
+    <div className="field">
+      <label>{t('stt.mic')}</label>
+      <select
+        value={settings.micDeviceId}
+        onChange={(e) => {
+          const d = mics.find((m) => m.deviceId === e.target.value)
+          void update({ micDeviceId: d?.deviceId ?? '', micLabel: d?.label ?? '' })
+        }}
+      >
+        <option value="">{t('stt.mic.default')}</option>
+        {mics.map((d, i) => (
+          <option key={d.deviceId} value={d.deviceId}>
+            {d.label || `${t('stt.mic')} ${i + 1}`}
+          </option>
+        ))}
+        {!known && (
+          <option value={settings.micDeviceId}>
+            {settings.micLabel || t('stt.mic')} ({t('stt.mic.missing')})
+          </option>
+        )}
+      </select>
+      <small className="muted">{t('stt.mic.note')}</small>
+    </div>
+  )
+}
+
 function KeyField({ name, label }: { name: KeyName; label: string }) {
   const { status, t } = useSettings()
   const [value, setValue] = useState('')
@@ -254,6 +316,7 @@ export function SettingsApp() {
               </select>
               <small className="muted">{t('stt.note')}</small>
             </div>
+            <MicField settings={settings} update={update} t={t} />
             <KeyField name="deepgram" label={t('stt.deepgramKey')} />
           </>
         )}

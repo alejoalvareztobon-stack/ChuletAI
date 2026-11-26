@@ -36,6 +36,9 @@ export interface Settings {
   effort: Effort
   geminiModel: string
   transcriber: TranscriberId
+  /** Micrófono elegido ('' = el predeterminado del sistema). El nombre sirve si cambia el id. */
+  micDeviceId: string
+  micLabel: string
   /** Fuerza el modo simulado aunque haya claves. */
   simulation: boolean
   privateMode: boolean
@@ -144,6 +147,8 @@ export const DEFAULT_SETTINGS: Settings = {
   effort: 'low',
   geminiModel: 'gemini-flash-latest',
   transcriber: 'deepgram',
+  micDeviceId: '',
+  micLabel: '',
   simulation: false,
   privateMode: true,
   shortcutModifier: 'Control',
@@ -169,6 +174,8 @@ export function normalizeSettings(raw: unknown): Settings {
     effort: pick(r.effort, ['low', 'medium', 'high'] as const, DEFAULT_SETTINGS.effort),
     geminiModel: str(r.geminiModel, DEFAULT_SETTINGS.geminiModel).trim() || DEFAULT_SETTINGS.geminiModel,
     transcriber: 'deepgram',
+    micDeviceId: str(r.micDeviceId, ''),
+    micLabel: str(r.micLabel, ''),
     simulation: typeof r.simulation === 'boolean' ? r.simulation : DEFAULT_SETTINGS.simulation,
     privateMode: typeof r.privateMode === 'boolean' ? r.privateMode : DEFAULT_SETTINGS.privateMode,
     shortcutModifier: pick(r.shortcutModifier, ['Control', 'Control+Alt'] as const, DEFAULT_SETTINGS.shortcutModifier),

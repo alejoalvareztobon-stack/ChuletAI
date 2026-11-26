@@ -134,16 +134,44 @@ const MIC_CONSTRAINTS = { echoCancellation: true, noiseSuppression: true, autoGa
  * dispositivo está muteado en Windows o no es el que usa Meet), prueba el de comunicaciones
  * y luego los demás, y se queda con el primero que no esté silenciado.
  */
-export async function openMicrophone(onProblem: AudioProblem): Promise<MediaStream> {
+export interface MicChoice {
+  deviceId: string
+  label: string
+}
+
+export async function openMicrophone(onProblem: AudioProblem, choice?: MicChoice): Promise<MediaStream> {
   const open = (deviceId?: string): Promise<MediaStream> =>
     navigator.mediaDevices.getUserMedia({
       audio: deviceId ? { ...MIC_CONSTRAINTS, deviceId: { exact: deviceId } } : MIC_CONSTRAINTS,
       video: false
     })
   const isMuted = (s: MediaStream): boolean => s.getAudioTracks().every((t) => t.muted)
-  const first = await open()
   const inputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput')
   onProblem('mic', `inputs: ${inputs.map((d) => `[${d.deviceId.slice(0, 8)}] ${d.label}`).join(' | ')}`)
+
+  // 1. El que eligió el usuario (por id; si el id cambió, por nombre).
+  if (choice?.deviceId) {
+    const chosen =
+      inputs.find((d) => d.deviceId === choice.deviceId) ?? inputs.find((d) => choice.label && d.label === choice.label)
+    if (!chosen) {
+      onProblem('mic', `chosen microphone "${choice.label}" is not connected, using the default`)
+    } else {
+      try {
+        const s = await open(chosen.deviceId)
+        if (!isMuted(s)) {
+          onProblem('mic', `using the chosen microphone "${chosen.label}"`)
+          return s
+        }
+        s.getTracks().forEach((t) => t.stop())
+        onProblem('mic', `chosen microphone "${chosen.label}" is muted, using the default`)
+      } catch (err) {
+        onProblem('mic', `could not open "${chosen.label}": ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+  }
+
+  // 2. El predeterminado del sistema; 3. si está silenciado, cualquier otro que funcione.
+  const first = await open()
   if (!isMuted(first)) return first
 
   onProblem('mic', `default microphone "${first.getAudioTracks()[0]?.label}" is muted, trying others`)
@@ -178,7 +206,8 @@ export interface AudioCapture {
 export async function startAudioCapture(
   sink: ChunkSink,
   onLevel: (channel: AudioChannel, level: number) => void,
-  onProblem: AudioProblem = () => {}
+  onProblem: AudioProblem = () => {},
+  mic?: MicChoice
 ): Promise<AudioCapture> {
   const captures = new Map<AudioChannel, ChannelCapture>()
   const errors: Partial<Record<AudioChannel, string>> = {}
@@ -199,9 +228,9 @@ export async function startAudioCapture(
   }
 
   try {
-    const mic = await openMicrophone(onProblem)
-    if (mic.getAudioTracks().every((t) => t.muted)) errors.mic = 'Microphone is muted in Windows (Settings > Sound > Input)'
-    captures.set('mic', await captureChannel(mic, 'mic', sink, onLevel, onProblem))
+    const micStream = await openMicrophone(onProblem, mic)
+    if (micStream.getAudioTracks().every((t) => t.muted)) errors.mic = 'Microphone is muted in Windows (Settings > Sound > Input)'
+    captures.set('mic', await captureChannel(micStream, 'mic', sink, onLevel, onProblem))
   } catch (err) {
     errors.mic = err instanceof Error ? err.message : String(err)
   }

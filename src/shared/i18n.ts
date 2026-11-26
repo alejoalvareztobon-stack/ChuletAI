@@ -98,6 +98,10 @@ const en = {
 
   'stt.provider': 'Transcription service',
   'stt.deepgramKey': 'Deepgram API key',
+  'stt.mic': 'Microphone',
+  'stt.mic.default': 'System default',
+  'stt.mic.missing': 'not connected',
+  'stt.mic.note': 'If the chosen microphone is muted in Windows or unplugged, ChuletAI uses another one that works.',
   'stt.note': 'Deepgram Nova-3. In "Auto / mixed" mode it understands English and Spanish in the same sentence.',
 
   'keys.placeholder': 'Paste the key here',
@@ -234,6 +238,10 @@ const es: Dictionary = {
 
   'stt.provider': 'Servicio de transcripción',
   'stt.deepgramKey': 'Clave de API de Deepgram',
+  'stt.mic': 'Micrófono',
+  'stt.mic.default': 'El predeterminado del sistema',
+  'stt.mic.missing': 'no conectado',
+  'stt.mic.note': 'Si el micrófono elegido está silenciado en Windows o desconectado, ChuletAI usa otro que funcione.',
   'stt.note': 'Deepgram Nova-3. En modo "Automático / mixto" entiende inglés y español en la misma frase.',
 
   'keys.placeholder': 'Pega la clave aquí',
